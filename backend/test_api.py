@@ -2,6 +2,8 @@
 import json
 import time
 import unittest
+from unittest.mock import patch
+from backend import opsin
 from fastapi.testclient import TestClient
 from backend.app import app, FONT_FILES
 
@@ -14,7 +16,7 @@ class APITests(unittest.TestCase):
     def tearDown(self):
         self.context.__exit__(None, None, None)
 
-    def job(self, operation, payload):
+    def job(self, operation, payload, expected_status='complete'):
         response = self.client.post('/api/v1/jobs', json={'operation':operation,'payload':payload})
         self.assertEqual(response.status_code,202,response.text)
         job = response.json()
@@ -22,8 +24,8 @@ class APITests(unittest.TestCase):
         while job['status'] in {'queued','running'} and time.monotonic()<deadline:
             time.sleep(.03)
             job = self.client.get('/api/v1/jobs/'+job['id']).json()
-        self.assertEqual(job['status'],'complete',job.get('error'))
-        return job['result']
+        self.assertEqual(job['status'],expected_status,job.get('error'))
+        return job['result'] if expected_status == 'complete' else job['error']
 
     def test_same_origin_document_and_asset_allowlist(self):
         response = self.client.get('/')
@@ -60,6 +62,38 @@ class APITests(unittest.TestCase):
         self.assertTrue(data['available'])
         self.assertIn('server',data['privacy'])
         self.assertEqual(data['limits']['stereoisomers'],64)
+        self.assertIsInstance(data['opsinAvailable'], bool)
+        self.assertEqual(data['limits']['nameChars'], opsin.MAX_NAME_CHARS)
+
+    def test_opsin_smiles_passes_through_rdkit(self):
+        with patch.object(opsin, 'resolve', return_value='C/C=C/[C@H](F)Cl') as resolve:
+            record = self.job('parse', {'format': 'name', 'text': 'test compound'})['molecules'][0]
+        resolve.assert_awaited_once()
+        self.assertEqual((record['name'], record['nameSource']), ('test compound', 'OPSIN'))
+        self.assertTrue(record['knownName'])
+        expected = self.job('parse', {'format': 'smiles', 'text': 'C/C=C/[C@H](F)Cl'})['molecules'][0]
+        self.assertEqual(record['stereoisomerId'], expected['stereoisomerId'])
+        self.assertTrue(record['stereo']['centers'][0]['specified'])
+        self.assertEqual(record['stereo']['bonds'][0]['descriptor'], 'E')
+
+    def test_missing_opsin_does_not_disable_smiles(self):
+        with patch.object(opsin, 'runtime', return_value=None):
+            error = self.job('parse', {'format': 'name', 'text': 'ethanol'}, expected_status='failed')
+            self.assertIn('unavailable', error)
+            self.assertTrue(self.job('parse', {'format': 'smiles', 'text': 'CCO'})['molecules'])
+
+    @unittest.skipUnless(opsin.runtime(), 'optional local OPSIN runtime not installed')
+    def test_live_opsin_stereo(self):
+        self.assertTrue(self.client.get('/api/v1/capabilities').json()['opsinAvailable'])
+        for configuration in ('R', 'S'):
+            record = self.job('parse', {'format': 'name', 'text': f'({configuration})-butan-2-ol'})['molecules'][0]
+            self.assertEqual(record['stereo']['centers'][0]['cip'], configuration)
+        for configuration in ('E', 'Z'):
+            record = self.job('parse', {'format': 'name', 'text': f'({configuration})-but-2-ene'})['molecules'][0]
+            self.assertEqual(record['stereo']['bonds'][0]['descriptor'], configuration)
+        error = self.job('parse', {'format': 'name', 'text': 'not-a-compound-xyzzy'}, expected_status='failed')
+        self.assertIn('OPSIN', error)
+        self.assertNotIn('xyzzy', error)
 
     def test_live_stereo_conformer_and_export_job(self):
         result = self.job('enumerate',{'text':'CC(O)C(=O)O','format':'smiles'})

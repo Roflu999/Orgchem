@@ -3,6 +3,14 @@ const assert=require('node:assert/strict'),C=require('./chemistry.js'),M=require
 let count=0;function test(name,fn){fn();count++;console.log('PASS',name);}const iso=s=>C.describe(C.readSmiles(s));
 function draft(s){const g=iso(s);return M.fromStructure(g,G.layout2D(g,false));}
 function joined(a,b){const n=a.atoms.length;return {atoms:[...a.atoms,...b.atoms.map(v=>({...v,x:v.x+1000}))],bonds:[...a.bonds,...b.bonds.map(v=>({...v,a:v.a+n,b:v.b+n}))]};}
+test('offline structure notes depend on connectivity rather than name or formula',()=>{
+ const alcohol=iso('C1CC(O)C1'),ether=iso('C1CCOC1');
+ assert.equal(alcohol.formula,ether.formula);
+ const a=C.offlineInsights({...alcohol,name:'unknown'}),b=C.offlineInsights({...ether,name:'unknown'});
+ assert.deepEqual(a.donorSites.map(i=>alcohol.atoms[i]),['O']);assert.deepEqual(b.donorSites,[]);
+ assert.equal(a.independentRingCount,1);assert.equal(b.independentRingCount,1);
+ const unsaturated=C.offlineInsights(iso('C=CC#C'));assert.equal(unsaturated.doubles,1);assert.equal(unsaturated.triples,1);assert.equal(unsaturated.independentRingCount,0);
+});
 test('separate scene components retain individual names and formulas',()=>{
  const r=S.analyze(joined(draft('CCO'),draft('C1=CC=CC=C1')));assert(r.valid);assert.equal(r.components.length,2);assert.deepEqual(r.components.map(c=>c.structure.formula).sort(),['C2H6O','C6H6']);assert.equal(r.hydrogens.reduce((s,h)=>s+h,0),12);
 });

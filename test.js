@@ -17,6 +17,18 @@ for (const [formula,expected] of [['C2H6O',2],['C3H8O',3],['C4H10O',7],['C4H9Br'
     result.isomers.forEach((g,i)=>{same(C.canonical(C.readSmiles(g.notation)).key,g.id);same(C.formulaOf(C.readSmiles(g.notation)),formula);assert(!ids.has(g.id));ids.add(g.id);if(i)assert(result.isomers[i-1].stability.score<=g.stability.score);});
   });
 }
+test('formula worker reports the actual valence search, independently of molecule names',()=>{
+  const results=[],ctx=vm.createContext({});ctx.self=ctx;
+  const load=file=>vm.runInContext(fs.readFileSync(path.join(__dirname,file),'utf8'),ctx,{filename:file});
+  ctx.importScripts=(...files)=>files.forEach(load);ctx.postMessage=msg=>{if(msg.result)results.push(msg.result);};
+  load('chemistry-worker.js');
+  for(const formula of ['C2H6O','C4H6','C8H18'])ctx.onmessage({data:{request:1,parsed:{formula}}});
+  const [oxygen,unsaturated,octanes]=results;
+  assert.deepEqual(JSON.parse(JSON.stringify(oxygen.deduction)),{hydrogenLimit:6,skeletons:2,layers:[]});
+  same(unsaturated.deduction.hydrogenLimit,10);same(unsaturated.deduction.skeletons,2);
+  assert.deepEqual(Array.from(unsaturated.deduction.layers),[5,9]);same(unsaturated.isomers.length,9);
+  same(octanes.isomers.length,18);assert(octanes.isomers.every(m=>!m.name.startsWith('Structural isomer')));
+});
 test('functional groups preserve correct classifications',()=>{
   same(C.enumerate('C4H10O').isomers.filter(g=>g.tags.includes('alcohol')).length,4);
   const isomers=C.enumerate('C4H9Br').isomers;

@@ -140,6 +140,74 @@ class ParsingTests(unittest.TestCase):
             service.dispatch("parse", {"text": one + "not a molecule\n$$$$\n", "format": "sdf"})
 
 
+class StructureInsightTests(unittest.TestCase):
+    @staticmethod
+    def matches(record):
+        return {g["key"]: g["matches"] for g in record["structureInsights"]["functionalGroups"]}
+
+    def test_unlisted_isomers_have_different_evidence_and_descriptors(self):
+        alcohol, ether = parsed("CC(C)(O)CC"), parsed("CCOCCC")
+        self.assertEqual(alcohol["formula"], ether["formula"])
+        for record, key, evidence, donors in ((alcohol, "alcohol", ["a2", "a4"], 1),
+                                               (ether, "ether", ["a2", "a3", "a4"], 0)):
+            self.assertFalse(record["knownName"])
+            self.assertEqual(self.matches(record), {key: [evidence]})
+            insights = record["structureInsights"]
+            self.assertEqual((insights["hBondDonors"], insights["hBondAcceptors"]), (donors, 1))
+            self.assertIn(key, record["tags"])
+
+    def test_positive_motifs_and_neighboring_nonmatches(self):
+        cases = {
+            "O=CC(=O)C": {"aldehyde", "ketone"}, "CCN(C)C": {"amine"},
+            "CC(=O)O": {"carboxylic-acid"}, "O=COC": {"ester"}, "NC=O": {"amide"},
+            "C=CC#CC#N": {"alkene", "alkyne", "nitrile"}, "SC1CC1": {"thiol"},
+            "Oc1cccc(Br)c1": {"phenol", "halogenated-carbon"}, "COOC": {"peroxide"},
+            "CC(=O)OC(=O)C": set(), "NS(=O)(=O)C": set(), "CC(=O)[O-]": set(),
+            "[NH4+].[Cl-]": set(), "O=c1cccc[nH]1": set(),
+        }
+        for text, keys in cases.items():
+            with self.subTest(text=text):
+                record = parsed(text)
+                self.assertEqual(set(self.matches(record)), keys)
+                self.assertEqual(set(record["tags"]) & {k for k, _, _ in service._MOTIFS}, keys)
+        self.assertNotIn("halogenoalkane", parsed("Brc1ccccc1")["tags"])
+        self.assertIn("secondary-halogenoalkane", parsed("CC(Cl)C")["tags"])
+
+    def test_cycle_rank_independent_of_perceived_faces_and_fragments(self):
+        for text, expected in (("C1CC1.C1CCC1.Cl", 2), ("c1ccc2ccccc2c1", 2),
+                               ("C12C3C4C1C5C2C3C45", 5), ("[H]C#C[H]", 0), ("[Na+].[Cl-]", 0)):
+            with self.subTest(text=text):
+                self.assertEqual(parsed(text)["structureInsights"]["independentRingCount"], expected)
+
+    def test_symmetric_matches_maps_custom_ids_and_recomputation(self):
+        # Reverse the input traversal, retaining the identifiers on glycerol.
+        forward = parsed("[OH:9][CH2:6][CH:3]([OH:1])[CH2:8][OH:7]")
+        reverse = parsed("[OH:7][CH2:8][CH:3]([OH:1])[CH2:6][OH:9]")
+        self.assertEqual(forward["structureInsights"], reverse["structureInsights"])
+        self.assertEqual(self.matches(reverse), {"alcohol": [["a1", "a3"], ["a6", "a9"], ["a7", "a8"]]})
+        reverse["atomIds"] = ["endOH", "endC", "center", "midOH", "startC", "startOH"]
+        reverse["structureInsights"] = {"independentRingCount": 100, "functionalGroups": []}
+        restored = service.parse({"molecule": reverse})["molecules"][0]
+        self.assertEqual(self.matches(restored), {"alcohol": [["center", "midOH"], ["endC", "endOH"], ["startC", "startOH"]]})
+        self.assertEqual(restored["structureInsights"]["independentRingCount"], 0)
+        for pair in (("F[C@H](Cl)CO", "F[C@@H](Cl)CO"), ("C1=CC=CC=C1O", "c1ccccc1O")):
+            self.assertEqual(parsed(pair[0])["structureInsights"], parsed(pair[1])["structureInsights"])
+
+    def test_descriptor_hydrogen_representation_and_scope(self):
+        for text in ("CC(=O)O", "CC(=O)O[H]", "CC(=O)O[2H]"):
+            with self.subTest(text=text):
+                info = parsed(text)["structureInsights"]
+                self.assertEqual((info["hBondDonors"], info["hBondAcceptors"]), (1, 1))
+                self.assertEqual(info["functionalGroups"][0]["matches"], [["a2", "a3", "a4"]])
+        for text in ("CO.CO", "[NH3+]CC(=O)[O-]", "C[Mg]Br", "[CH2]C", "O", "C[NH3+]"):
+            with self.subTest(text=text):
+                info = parsed(text)["structureInsights"]
+                self.assertIsNone(info["hBondDonors"])
+                self.assertIsNone(info["hBondAcceptors"])
+        info = parsed("CC")["structureInsights"]
+        self.assertEqual((info["hBondDonors"], info["hBondAcceptors"]), (0, 0))
+
+
 class DraftTests(unittest.TestCase):
     @staticmethod
     def draft(record):

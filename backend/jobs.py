@@ -12,11 +12,13 @@ import time
 import uuid
 from typing import Any
 
+from . import opsin
+
 OPERATIONS = {"parse", "enumerate", "conformers", "projection", "torsion", "export", "relationship", "name"}
 TERMINAL = {"complete", "failed", "cancelled", "timed_out"}
 
 
-def _worker(connection, operation, payload, seconds, memory_mb):
+def _worker(connection, operation, payload, seconds, memory_mb, *, opsin_name=None):
     try:
         os.environ["OMP_NUM_THREADS"] = "1"
         os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -46,6 +48,9 @@ def _worker(connection, operation, payload, seconds, memory_mb):
             result = export_many(payload)
         else:
             result = dispatch(operation, payload)
+            if opsin_name is not None:
+                # OPSIN interpreted this input label; it did not generate a preferred name.
+                result['molecules'][0].update(name=opsin_name, knownName=True, nameSource='OPSIN')
         import json
         result_size = len(json.dumps(result, allow_nan=False))
         if result_size > 16 * 1024 * 1024:
@@ -191,14 +196,23 @@ class JobManager:
                 return
             job.started = time.monotonic()
             job.status = "running"
+            worker_options = {}
+            if job.operation == 'parse' and str(job.payload.get('format', '')).lower() == 'name':
+                # This stage consumes the same worker slot and wall-clock budget as
+                # RDKit. Forward only validated OPSIN output, never caller flags.
+                smiles = await opsin.resolve(job.payload.get('text'), timeout=self.timeout)
+                worker_options['opsin_name'] = job.payload['text'].strip()
+                job.payload = {'format': 'smiles', 'text': smiles}
             receiver, sender = self.context.Pipe(duplex=False)
-            job.process = self.context.Process(target=_worker, args=(sender, job.operation, job.payload, self.timeout, self.memory_mb), daemon=True)
+            job.process = self.context.Process(target=_worker, args=(sender, job.operation, job.payload, self.timeout, self.memory_mb),
+                                               kwargs=worker_options, daemon=True)
             # Forkserver/spawn serializes the payload and may cold-import
             # native libraries. Neither that work nor pipe receive/unpickling
             # belongs on the ASGI event loop.
             loop = asyncio.get_running_loop()
             startup = loop.run_in_executor(self.executor, job.process.start)
-            await asyncio.wait_for(asyncio.shield(startup), timeout=self.timeout)
+            remaining = self.timeout - (time.monotonic() - job.started)
+            await asyncio.wait_for(asyncio.shield(startup), timeout=max(0, remaining))
             sender.close()
             job.payload = {}
             receive = loop.run_in_executor(self.executor, receiver.recv)

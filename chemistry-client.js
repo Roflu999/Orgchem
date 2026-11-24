@@ -38,5 +38,15 @@
       if(id&&!finished)fetch('/api/v1/jobs/'+encodeURIComponent(id),{method:'DELETE',keepalive:true}).catch(()=>{});
     }
   }
-  root.ChemistryClient={ready,job,parse:(text,format='smiles',options={})=>job('parse',{text,format},options),cancelActive(){active.forEach(c=>c.abort());},get available(){return available;},get capabilities(){return capabilities;}};
+  // Only names explicitly requested, or rejected as names by the offline grammar,
+  // go to OPSIN. Never reinterpret a bad formula, SMILES or file as a name.
+  async function parseNameFallback(text, mode, error, options) {
+    const prefix = text.trimStart().match(/^(name|formula|smiles)\s*:/i);
+    const kind = prefix ? prefix[1].toLowerCase() : mode;
+    if (!capabilities?.opsinAvailable || !(kind === 'name' || (kind === 'auto' && error.code === 'UNSUPPORTED_NAME'))) return null;
+    const name = prefix ? text.trimStart().slice(prefix[0].length).trim() : text.trim();
+    const result = await job('parse', {text:name,format:'name'}, options);
+    return {kind:'structures', isomers:result.molecules, source:'OPSIN', fromName:true};
+  }
+  root.ChemistryClient={ready,job,parseNameFallback,parse:(text,format='smiles',options={})=>job('parse',{text,format},options),cancelActive(){active.forEach(c=>c.abort());},get available(){return available;},get capabilities(){return capabilities;}};
 })(typeof window!=='undefined'?window:globalThis);

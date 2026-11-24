@@ -95,6 +95,20 @@ function record(id='test-stereo'){
   await test('engine works without a DOM and catalogs can load before or after it',()=>{
     const c=vm.createContext({});c.globalThis=c;vm.runInContext(engineSource,c);assert.equal(c.AtlasI18n.t('unknown',{},'fallback'),'fallback');c.AtlasI18n.setLocale('ar');vm.runInContext(catalogSource,c);assert.equal(c.AtlasI18n.t('common.compare'),'مقارنة');assert.equal(c.AtlasI18n.locale,'ar');
   });
+  await test('structure notes follow graph selection and translate without changing mapped evidence',()=>{
+    const Chem=require('./chemistry.js'),app={state:{result:{imported:true}}};
+    const e=environment({Chem,BondAtlas:app,MoleculeRecords:require('./molecule-record.js')});
+    e.run('atlas-shell-locales.js');e.run('structure-notes.js');
+    const select=m=>e.document.dispatchEvent({type:'bondatlas:selection',detail:{molecule:m}});
+    const m=record();m.structureInsights={functionalGroups:[{key:'alcohol',matches:[['a1','a2']]}],independentRingCount:0,hBondDonors:1,hBondAcceptors:1};select(m);
+    assert.match(e.$('notes-hbond').textContent,/donor sites: 1; acceptor sites: 1/);
+    const evidence=e.$('notes-sites').querySelector('bdi');assert.equal(evidence.textContent,'C (a1)–O (a2)');
+    e.I.setLocale('fr');assert.equal(e.$('notes-groups').textContent,'Alcool');assert.equal(e.$('notes-sites').querySelector('bdi'),evidence);
+    select(record());assert.equal(e.$('structure-notes').hidden,true);
+    app.state.result.imported=false;select(Chem.resolveName('methoxymethane'));e.I.setLocale('en');
+    assert.equal(e.$('structure-notes').hidden,false);assert.equal(e.$('notes-sites').textContent,'');
+    assert.match(e.$('notes-hbond').textContent,/No O–H or N–H/);assert.match(e.$('notes-limits').textContent,/selected candidate/);
+  });
   await test('real builder locale changes keep drawing nodes, draft, camera-facing positions, focus and Undo',async()=>{
     const Chem=require('./chemistry.js'),Geometry=require('./geometry.js'),M=require('./sketcher-model.js'),Scene=require('./scene.js'),Records=require('./molecule-record.js');
     const calls=[],requests=[],client={available:true,ready:Promise.resolve({}),job(operation,payload,options){let resolve;const promise=new Promise(r=>resolve=r);requests.push({operation,payload,options,resolve});return promise;}};

@@ -30,22 +30,41 @@ MAX_TEXT = 2_000_000
 DEFAULT_SEED = 61453
 _CT = Chem.ChiralType
 _TETRA = {_CT.CHI_TETRAHEDRAL_CW, _CT.CHI_TETRAHEDRAL_CCW}
-_KNOWN = {
+_DISPLAY_NAMES = {
     "O": "Water", "CCO": "Ethanol", "CO": "Methanol", "C": "Methane",
     "CC": "Ethane", "CCC": "Propane", "CCCC": "Butane", "CC(C)C": "2-Methylpropane",
     "CC(=O)O": "Acetic acid", "CC(O)C(=O)O": "Lactic acid",
     "c1ccccc1": "Benzene", "CC=CC": "But-2-ene", "CC(O)C(C)O": "Butane-2,3-diol",
     "[NH4+]": "Ammonium", "[Na+].[Cl-]": "Sodium chloride",
 }
-_TAGS = {
-    "alcohol": "[CX4][OX2H]", "carboxylic-acid": "[CX3](=O)[OX2H1]",
-    "ester": "[CX3](=O)[OX2][#6]", "amide": "[CX3](=O)[NX3]",
-    "amine": "[NX3;!$(N-C=O)]", "alkene": "[CX3]=[CX3]", "alkyne": "[CX2]#[CX2]",
-    "ether": "[OD2]([#6])[#6]", "ketone": "[#6][CX3](=O)[#6]",
-    "aldehyde": "[CX3H1](=O)", "nitrile": "[CX2]#[NX1]",
-    "halogenoalkane": "[CX4][F,Cl,Br,I]", "peroxide": "[OX2][OX2]",
-}
-_TAG_QUERIES = {name: Chem.MolFromSmarts(smarts) for name, smarts in _TAGS.items()}
+# Match local motifs, not molecule identities. Requiring C or H on the acyl
+# side distinguishes carboxylic acid derivatives from carbonates/carbamates.
+_ACYL = "[CX3+0;$([C]-[#6]),H1](=[OX1+0])"
+_NON_ACYL_C = "[#6;!$([#6]=[O,N,S])]"
+_MOTIFS = (
+    ("alcohol", "Alcohol", "[CX4+0]-[OX2H1+0]"),
+    ("phenol", "Phenol", "[c]-[OX2H1+0]"),
+    ("ether", "Ether", f"{_NON_ACYL_C}-[OX2H0+0]-{_NON_ACYL_C}"),
+    ("aldehyde", "Aldehyde", "[CX3+0;$([CH1]-[#6]),H2]=[OX1+0]"),
+    ("ketone", "Ketone", "[#6]-[CX3+0](=[OX1+0])-[#6]"),
+    ("carboxylic-acid", "Carboxylic acid", f"{_ACYL}-[OX2H1+0]"),
+    ("ester", "Ester", f"{_ACYL}-[OX2H0+0]-{_NON_ACYL_C}"),
+    ("amide", "Amide", f"{_ACYL}-[NX3v3+0]"),
+    # Match the N center once, not once per carbon substituent. Restrict
+    # neighbors to C/H to exclude e.g. sulfonamides and hydroxylamines.
+    ("amine", "Amine", "[NX3v3+0;$([N]-[#6]);!$([N]~[!#1;!#6]);!$([N]-[#6]=[O,S,N])]"),
+    ("nitrile", "Nitrile", "[#6]-[CX2+0]#[NX1+0]"),
+    ("alkene", "Alkene", "[CX3+0]=[CX3+0]"),
+    ("alkyne", "Alkyne", "[CX2+0]#[CX2+0]"),
+    ("thiol", "Thiol", f"{_NON_ACYL_C}-[SX2H1+0]"),
+    ("halogenated-carbon", "Carbon-halogen bond", "[#6]-[F,Cl,Br,I;X1;+0]"),
+    ("peroxide", "Peroxide", "[OX2+0]-[OX2+0]"),
+)
+_MOTIF_QUERIES = [(key, label, Chem.MolFromSmarts(pattern)) for key, label, pattern in _MOTIFS]
+_HB_ELEMENTS = {"H", "C", "N", "O", "F", "P", "S", "Cl", "Br", "I"}
+_INSIGHT_SCOPE = ("Selected local motifs in the supplied graph only; not exhaustive. "
+                  "H-bond counts are potential sites, not measured interactions. They apply only to a single "
+                  "carbon-containing component with no charged or radical atoms and elements H/C/N/O/F/P/S/Cl/Br/I.")
 
 
 def _bounded(value, default, upper, name, lower=1):
@@ -150,6 +169,10 @@ def _canonical(mol, stereo=True):
             raise ValueError("This RDKit build cannot preserve enhanced stereo identities")
         return Chem.MolToCXSmiles(bare, Chem.SmilesWriteParams(), Chem.CXSmilesFields.CX_ENHANCEDSTEREO)
     return Chem.MolToSmiles(bare, canonical=True, isomericSmiles=True)
+
+
+# Names are optional captions. Canonicalize these examples once, not on every miss.
+_NAME_BY_CONNECTIVITY = {_canonical(Chem.MolFromSmiles(s), False): name for s, name in _DISPLAY_NAMES.items()}
 
 
 def _hash(prefix, text):
@@ -570,6 +593,27 @@ def _molblock(mol, v3000=True):
         raise ValueError(f"Cannot export molecular features to MOL: {exc}") from exc
 
 
+def _structure_insights(mol, components):
+    ids = [_aid(atom) for atom in mol.GetAtoms()]
+    groups = []
+    for key, label, query in _MOTIF_QUERIES:
+        matches = mol.GetSubstructMatches(query, uniquify=True)
+        if matches:
+            # Stable even when equivalent query atoms or input atoms are reordered.
+            evidence = sorted(sorted(ids[i] for i in match) for match in matches)
+            groups.append({"key": key, "label": label, "matches": evidence})
+    elements = {a.GetSymbol() for a in mol.GetAtoms()}
+    hb_in_scope = (components == 1 and "C" in elements and elements <= _HB_ELEMENTS
+                   and not any(a.GetFormalCharge() or a.GetNumRadicalElectrons() for a in mol.GetAtoms()))
+    # RDKit's HBA rules expect implicit H (e.g. on carboxylic OH). Keep
+    # mapped and isotopic H intact on the record; normalize a descriptor copy.
+    hb_mol = Chem.RemoveAllHs(mol) if hb_in_scope else None
+    return {"independentRingCount": mol.GetNumBonds() - mol.GetNumAtoms() + components,
+            "functionalGroups": groups, "scope": _INSIGHT_SCOPE,
+            "hBondDonors": rdMolDescriptors.CalcNumHBD(hb_mol) if hb_mol is not None else None,
+            "hBondAcceptors": rdMolDescriptors.CalcNumHBA(hb_mol) if hb_mol is not None else None}
+
+
 def _record(mol, conformers=None, warnings=None):
     _set_ids(mol)
     stereo = _stereo(mol)
@@ -577,41 +621,41 @@ def _record(mol, conformers=None, warnings=None):
     conn_notation = _canonical(mol, stereo=False)
     sid = _hash("stereo-", notation)
     counts = _counts(mol)
+    components = len(Chem.GetMolFrags(mol))
+    insights = _structure_insights(mol, components)
     charge = Chem.GetFormalCharge(mol)
     dbe = None
-    if charge == 0 and not any(a.GetNumRadicalElectrons() for a in mol.GetAtoms()) and set(counts) <= {"C", "H", "N", "O", "S", "F", "Cl", "Br", "I"}:
+    if components == 1 and charge == 0 and not any(a.GetNumRadicalElectrons() for a in mol.GetAtoms()) and set(counts) <= {"C", "H", "N", "O", "S", "F", "Cl", "Br", "I"}:
         dbe = (2 * counts.get("C", 0) + 2 + counts.get("N", 0) - counts.get("H", 0) - sum(counts.get(x, 0) for x in ("F", "Cl", "Br", "I"))) / 2
-        if len(Chem.GetMolFrags(mol)) != 1:
-            dbe = None
-    known = _KNOWN.get(conn_notation)
-    if known is None:  # Canonicalization of disconnected fragments can change order.
-        known = next((name for smiles, name in _KNOWN.items() if _canonical(Chem.MolFromSmiles(smiles), False) == conn_notation), None)
+    known = _NAME_BY_CONNECTIVITY.get(conn_notation)
     skeletal_svg, skeletal = _depiction(mol, False)
     displayed_svg, displayed = _depiction(mol, True)
-    tags = [name for name, query in _TAG_QUERIES.items() if mol.HasSubstructMatch(query)]
+    motif_atoms = {g["key"]: {identity for match in g["matches"] for identity in match}
+                   for g in insights["functionalGroups"]}
+    tags = list(motif_atoms)
     for atom in mol.GetAtoms():
         if atom.GetAtomicNum() != 6 or atom.GetHybridization() != Chem.HybridizationType.SP3:
             continue
         neighbors = list(atom.GetNeighbors())
         carbons = sum(n.GetAtomicNum() == 6 for n in neighbors)
         level = 'primary' if carbons <= 1 else 'secondary' if carbons == 2 else 'tertiary'
-        if 'alcohol' in tags and any(n.GetAtomicNum() == 8 and n.GetFormalCharge() == 0 and n.GetTotalNumHs(includeNeighbors=True) > 0 for n in neighbors):
+        if _aid(atom) in motif_atoms.get('alcohol', ()):
             tags.append(level + '-alcohol')
-        if 'halogenoalkane' in tags and any(n.GetAtomicNum() in (9, 17, 35, 53) for n in neighbors):
-            tags.append(level + '-halogenoalkane')
+        if _aid(atom) in motif_atoms.get('halogenated-carbon', ()):
+            tags.extend(('halogenoalkane', level + '-halogenoalkane'))
     if all(a.GetAtomicNum() in (1, 6) for a in mol.GetAtoms()) and all(b.GetBondType() == Chem.BondType.SINGLE for b in mol.GetBonds()):
         tags.append('alkane')
     tags = list(dict.fromkeys(tags))
     if any(a.GetIsAromatic() for a in mol.GetAtoms()):
         tags.append("aromatic")
-    if mol.GetRingInfo().NumRings():
+    if insights["independentRingCount"]:
         tags.append("cyclic")
     notes = list(warnings or [])
     if mol.HasProp("_AtlasWarnings"):
         notes.extend(json.loads(mol.GetProp("_AtlasWarnings")))
     if stereo["unsupported"]:
         notes.append("Some stereo features are retained but not supported for enumeration/projection")
-    if len(Chem.GetMolFrags(mol)) > 1:
+    if components > 1:
         notes.append("Disconnected structure: interfragment assembly is not thermodynamically ranked")
     return {
         "provenance": {"toolkit": "RDKit", "version": rdBase.rdkitVersion, "identity": "mapped chemical state; canonical identity excludes transport atom maps"},
@@ -623,6 +667,7 @@ def _record(mol, conformers=None, warnings=None):
         "radicals": [a.GetNumRadicalElectrons() for a in mol.GetAtoms()], "lonePairCounts": _lone_pair_counts(mol),
         "hydrogens": [a.GetTotalNumHs() for a in mol.GetAtoms()], "bonds": _bonds(mol),
         "metadata": {"counts": dict(counts), "mass": float(Descriptors.MolWt(mol)), "heavy": mol.GetNumHeavyAtoms(), "dbe": dbe},
+        "structureInsights": insights,
         "tags": tags, "stability": {"score": 0, "label": "Not stability-ranked", "reasons": [], "method": "RDKit connectivity/stereochemistry; no thermodynamic stability model"},
         "stereo": stereo, "molblock": _molblock(mol), "depictionId": _hash('depiction-', skeletal_svg + displayed_svg), "depictions": {"skeletal": skeletal_svg, "displayed": displayed_svg},
         "layouts": {"skeletal": skeletal, "displayed": displayed}, "conformers": list(conformers or []), "warnings": list(dict.fromkeys(notes)),

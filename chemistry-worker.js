@@ -1,5 +1,5 @@
 'use strict';
-importScripts('chemistry.js');
+importScripts('systematic-name.js', 'chemistry.js');
 self.onmessage = function (event) {
   try {
     const result = Chem.enumerate(event.data.parsed, { onProgress: progress => self.postMessage({ request: event.data.request, progress }) });

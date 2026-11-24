@@ -293,20 +293,29 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   <div class="entry-tools"><div class="entry-left"><label for="input-mode">Input type</label><select id="input-mode" class="compact-select"><option value="auto">Auto-detect</option><option value="formula">Molecular formula</option><option value="name">Compound name</option><option value="smiles">SMILES</option></select><span class="input-note">Use = for double bonds and # for triple bonds in SMILES.</span></div><div class="entry-actions"><button class="plain-button" id="open-import" type="button">Paste / import file ↗</button></div></div>
   <form id="search-form" novalidate>
     <div class="searchbar">
-      <label class="field formula-field" for="formula-input"><span class="field-label">Formula, compound name or SMILES</span><span class="input-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg><input id="formula-input" name="formula" value="C4H10O" placeholder="C4H10O alcohol · acetone · smiles: CCC#C" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="formula-hint"></span></label>
+      <label class="field formula-field" for="formula-input"><span class="field-label">Formula, compound name or SMILES</span><span class="input-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg><input id="formula-input" name="formula" value="C4H10O" placeholder="C4H10O alcohol · acetone · smiles: CCC#C" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="entry-help"></span></label>
       <label class="field filter-field" for="group-filter"><span class="field-label">Functional group</span><select id="group-filter" name="group"><option value="all">All functional groups</option><optgroup label="Alcohols"><option value="alcohol">Alcohol</option><option value="primary-alcohol">Primary alcohol</option><option value="secondary-alcohol">Secondary alcohol</option><option value="tertiary-alcohol">Tertiary alcohol</option></optgroup><optgroup label="Halogenoalkanes"><option value="halogenoalkane">Halogenoalkane</option><option value="primary-halogenoalkane">Primary halogenoalkane</option><option value="secondary-halogenoalkane">Secondary halogenoalkane</option><option value="tertiary-halogenoalkane">Tertiary halogenoalkane</option></optgroup><optgroup label="Other groups"><option value="ether">Ether</option><option value="aldehyde">Aldehyde</option><option value="ketone">Ketone</option><option value="carboxylic-acid">Carboxylic acid</option><option value="ester">Ester</option><option value="amine">Amine</option><option value="amide">Amide</option><option value="nitrile">Nitrile</option><option value="alkane">Alkane / cycloalkane</option><option value="alkene">Alkene</option><option value="alkyne">Alkyne</option><option value="cyclic">Cyclic structure</option><option value="enol">Enol</option><option value="peroxide">Peroxide</option></optgroup></select></label>
       <button class="primary-button" id="find-button" type="submit"><span id="find-label" data-i18n="shell.find">Find isomers</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"></path></svg></button>
     </div>
   </form>
   <div class="examples" id="formula-hint"><span class="examples-label">Try a formula</span><button class="example" data-formula="C2H6O" type="button">C₂H₆O</button><button class="example" data-formula="C4H10O" type="button">C₄H₁₀O</button><button class="example" data-formula="C4H9Br" type="button">C₄H₉Br</button><button class="example" data-formula="C4H6" type="button">C₄H₆ · double/triple</button><button class="example" data-formula="C10H22" type="button">C₁₀H₂₂ · larger</button><button class="example" data-formula="C3H6O" type="button">C₃H₆O</button></div>
+  <p id="entry-help" class="input-note" data-i18n="reason.entry">Try C2H6O to compare structures, or enter a name such as acetone or 3-methylhexan-2-ol. Only supported English names can be parsed.</p>
+  <section class="formula-reasoning" id="formula-reasoning" aria-labelledby="formula-reason-title" hidden>
+    <div class="reason-heading"><div><h2 id="formula-reason-title" data-i18n="reason.title">What can this formula tell us?</h2><p id="formula-conclusion"></p></div><a href="#isomer-list" data-i18n="reason.skip">Go to structures</a></div>
+    <details><summary data-i18n="reason.steps">Follow the deduction</summary><ol>
+      <li><strong data-i18n="reason.inventory">Count the hydrogens</strong><p id="reason-hydrogen"></p></li>
+      <li><strong data-i18n="reason.connect">Connect the atoms</strong><p id="reason-skeletons"></p></li>
+      <li><strong data-i18n="reason.check">Check what fits</strong><p id="reason-layers"></p><p data-i18n="reason.unique">Fill unused bonds with hydrogen. Keep only exact formula matches, and count each connectivity once, even if drawn another way.</p></li>
+    </ol></details>
+  </section>
   </div>
   <section id="stereo-explorer" hidden></section>
   <section class="workspace" id="workspace" aria-busy="false" aria-label="Selected molecule" tabindex="-1">
     <aside class="index" aria-label="Structural isomer results">
-      <div class="index-header"><h2 class="index-title">Structural isomers</h2><span class="count-badge" id="result-count">7</span></div>
+      <div class="index-header"><h2 class="index-title" id="results-heading">Structural isomers</h2><span class="count-badge" id="result-count">7</span></div>
       <p class="index-subtitle" id="result-summary" aria-live="polite">All 7 connections for C₄H₁₀O</p>
       <div class="sort-controls"><label for="structure-sort">Sort structures</label><div class="sort-row"><select id="structure-sort" class="compact-select"><option value="reactivity">Reactivity priority</option><option value="relationship">Isomer relationship</option><option value="group">Functional group</option><option value="name">Compound name</option><option value="mass">Molar mass</option></select><select id="sort-direction" class="compact-select" aria-label="Sort direction"><option value="asc">↑ Ascending</option><option value="desc">↓ Descending</option></select></div><div id="sort-reference-controls" hidden><button class="plain-button" id="sort-use-reference" type="button">Compare with selected structure</button><p id="sort-reference-label"></p><p>Relationships use connectivity and functional-group heuristics. Several types can overlap; stereoisomers are not classified.</p></div></div>
-      <div class="isomer-list" id="isomer-list"></div>
+      <div class="isomer-list" id="isomer-list" tabindex="-1" role="group" aria-labelledby="results-heading"></div>
       <button class="plain-button" id="load-more" type="button" hidden>Show 40 more structures</button>
       <div class="index-footer" id="index-footer">Fewer reactive / strain flags ranked first.<br>All candidates remain included.</div>
     </aside>
@@ -340,6 +349,16 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
       <div id="cloud-message" role="status" hidden></div>
       <div class="model-info" id="model-info">
         <div class="model-info-top"><div><h2 id="selected-name">Butan-1-ol</h2><p id="selected-description">Primary alcohol · Unassigned stereochemistry</p><p id="selected-method" class="method-note"></p></div><button class="copy-button" id="copy-smiles" type="button" title="Copy the selected structure as SMILES"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"></rect><path d="M12 7V3H3v9h4"></path></svg><span id="copy-label">Copy SMILES</span></button></div>
+        <p id="connectivity-name" hidden><span data-i18n="reason.nameLabel">Systematic name (connectivity only):</span> <bdi id="connectivity-name-value" dir="ltr" lang="en"></bdi></p>
+        <section id="structure-notes" class="structure-notes" aria-labelledby="notes-title" hidden>
+          <header><h3 id="notes-title" data-i18n="notes.title">Reading the structure</h3><p data-i18n="notes.intro">What the atoms and bonds tell us, without a name lookup.</p></header>
+          <ul id="notes-groups" class="notes-groups"></ul>
+          <p id="notes-hbond"></p>
+          <details><summary data-i18n="notes.evidence">Inspect the evidence</summary>
+            <p id="notes-topology"></p><ul id="notes-sites" class="notes-sites"></ul>
+            <p id="notes-limits" class="notes-limits"></p>
+          </details>
+        </section>
         <button class="plain-button" id="edit-in-builder" type="button">Edit this structure in builder →</button>
         <details id="structure-details" class="structure-details"><summary>Structure &amp; calculation details</summary>
         <dl class="properties"><div class="property"><dt>Molar mass</dt><dd id="mass-value">74.12 g/mol</dd></div><div class="property"><dt>Total atoms</dt><dd id="atoms-value">15</dd></div><div class="property"><dt>Unsaturation</dt><dd id="dbe-value">0 DBE</dd></div><div class="property"><dt>SMILES</dt><dd id="selected-smiles">CCCCO</dd></div></dl>
@@ -359,10 +378,11 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   <details class="coverage" id="coverage"><summary><span>How this lab works</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5"></path></svg></summary><p id="technical-language-note" class="technical-language-note" data-i18n="shell.scopeNote">Detailed technical scope below is provided in its original English. Interface translations do not change chemical data.</p><div class="coverage-body" lang="en"><section><h3>Exhaustive within a defined model</h3><p>Every unique connected, neutral, closed-shell bonding graph for supported formulas. Carbon has valence 4, nitrogen 3, oxygen 2, and F, Cl, Br and I valence 1. Rings, branching and multiple bonds are included. Unstable or highly strained candidates remain available but receive lower priority when peroxide, enol, strained-ring or other flagged motifs are detected. The score is a structural heuristic, not a measurement or reliable prediction of stability.</p></section><section><h3>Small molecules, clear limits</h3><p>Formula searches support 12 heavy atoms at DBE 0, 10 at DBE 1, 9 at DBE 2, and 7 at DBE 3–4. Offline structure viewing supports 64 heavy atoms; the RDKit service accepts 256 base atoms, up to 64 stereo results and 50 requested conformers per calculation. Each ring or double bond adds one DBE; a triple bond adds two. Searches stop at 22 seconds or 12,000 candidates with an explanation, never a partial list labeled complete. Imported structures are not an exhaustive isomer search.</p></section><section><h3>Configuration and conformation</h3><p>The RDKit workspace separates supported R/S and E/Z stereoisomers and samples conformers without mixing configurations. Charges, radicals, isotopes and salts are supported where the toolkit and selected format can preserve them. The neutral-only and explicit-Kekulé restrictions apply to the offline compatibility parser, not the RDKit service. Unsupported chemical annotations are reported rather than silently discarded. Primary halogenoalkanes include methyl halides here. Legacy coordinates remain illustrative; the RDKit view uses the selected stereo-verified conformer and reports its geometry method. Qualitative π clouds are separate from imported quantum grids.</p></section></div></details>
   </main>
   <footer class="footer"><span>Orgchem Visualizer · <span data-i18n="shell.footer">An open molecular workspace</span></span><span><span data-i18n="shell.rendering">Rendering with</span> <a href="https://3dmol.csb.pitt.edu/doc/" target="_blank" rel="noopener noreferrer">3Dmol.js</a> · <span data-i18n="shell.privacyFooter">Formula search stays local · RDKit structures use this server</span></span></footer>
-  <dialog id="import-dialog" aria-labelledby="import-title"><div class="dialog-top"><h2 id="import-title">Bring a structure in</h2><button class="plain-button" id="close-import" type="button" aria-label="Close import">✕</button></div><p class="dialog-description">Paste SMILES, MOL/SDF V2000, or Orgchem Visualizer JSON, or choose a file. Connectivity and bond orders are preserved; coordinates are regenerated. Toolkit imports support up to 64 records; the legacy neutral importer supports 500. Files must fit the 1 MB input budget. The RDKit server preserves supported stereo, charge, radical and isotope annotations. Unsupported features are explained rather than silently removed.</p><div class="dialog-row"><label for="import-format">Format</label><select id="import-format" class="compact-select"><option value="auto">Auto-detect</option><option value="smiles">SMILES / .smi</option><option value="mol">MOL V2000</option><option value="sdf">SDF V2000</option><option value="json">Orgchem Visualizer JSON</option><option value="formula">Molecular formula</option><option value="name">Offline compound name</option></select><input type="file" id="file-input" accept=".mol,.sdf,.json,.smi,.smiles,.txt" aria-label="Choose a molecular structure file"></div><label for="import-text" hidden>Structure text</label><textarea id="import-text" class="structure-text" spellcheck="false" placeholder="CCC#C&#10;or paste a MOL/SDF/JSON record here"></textarea><p id="import-progress" class="dialog-description" role="status" hidden></p><p id="import-error" class="dialog-error" role="alert" hidden></p><div class="dialog-actions"><span class="input-note">Files can also be dropped onto the molecule viewer.</span><button class="action-button" id="apply-import" type="button">Open structure(s)</button></div></dialog>
+  <dialog id="import-dialog" aria-labelledby="import-title"><div class="dialog-top"><h2 id="import-title">Bring a structure in</h2><button class="plain-button" id="close-import" type="button" aria-label="Close import">✕</button></div><p class="dialog-description">Paste SMILES, MOL/SDF V2000, or Orgchem Visualizer JSON, or choose a file. Connectivity and bond orders are preserved; coordinates are regenerated. Toolkit imports support up to 64 records; the legacy neutral importer supports 500. Files must fit the 1 MB input budget. The RDKit server preserves supported stereo, charge, radical and isotope annotations. Unsupported features are explained rather than silently removed.</p><div class="dialog-row"><label for="import-format">Format</label><select id="import-format" class="compact-select"><option value="auto">Auto-detect</option><option value="smiles">SMILES / .smi</option><option value="mol">MOL V2000</option><option value="sdf">SDF V2000</option><option value="json">Orgchem Visualizer JSON</option><option value="formula">Molecular formula</option><option value="name" data-i18n="shell.name">Compound name</option></select><input type="file" id="file-input" accept=".mol,.sdf,.json,.smi,.smiles,.txt" aria-label="Choose a molecular structure file"></div><label for="import-text" hidden>Structure text</label><textarea id="import-text" class="structure-text" spellcheck="false" placeholder="CCC#C&#10;or paste a MOL/SDF/JSON record here"></textarea><p id="import-progress" class="dialog-description" role="status" hidden></p><p id="import-error" class="dialog-error" role="alert" hidden></p><div class="dialog-actions"><span class="input-note">Files can also be dropped onto the molecule viewer.</span><button class="action-button" id="apply-import" type="button">Open structure(s)</button></div></dialog>
   <dialog id="export-dialog" aria-labelledby="export-title"><div class="dialog-top"><h2 id="export-title">Your structure data</h2><button class="plain-button" id="close-export" type="button" aria-label="Close export">✕</button></div><p class="dialog-description" id="export-description"></p><label for="export-text" hidden>Exported structure text</label><textarea id="export-text" class="structure-text" readonly spellcheck="false"></textarea><div class="dialog-actions"><span class="input-note" id="export-feedback" role="status">Select this text to copy it manually if clipboard access is unavailable.</span><button class="action-button" id="copy-export" type="button">Copy text</button></div></dialog>
 </div>
 <script src="vendor/3dmol-2.4.2/3Dmol-min.js"></script>
+<script src="systematic-name.js"></script>
 <script src="chemistry.js"></script>
 <script src="sketcher-model.js"></script>
 <script src="scene.js"></script>
@@ -373,6 +393,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 <script src="formats.js"></script>
 <script src="molecule-record.js"></script>
 <script src="chemistry-client.js"></script>
+<script src="structure-notes.js"></script>
 <script>
 (function () {
   'use strict';
@@ -382,7 +403,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   function ui(target,key,params={},fallback){const node=typeof target==='string'?$(target):target;if(!node)return;if(I)I.bindText(node,key,params,fallback);else node.textContent=T(key,params,fallback);}
   function uiAttr(target,attribute,key,params={},fallback){const node=typeof target==='string'?$(target):target;if(!node)return;if(I)I.bindAttr(node,attribute,key,params,fallback);else node.setAttribute(attribute,T(key,params,fallback));}
   function stereoText(iso){const text=R.stereoLabel(iso);return text==='Unassigned stereochemistry'?T('viewer.unassigned',{},text):text==='No assigned stereogenic features'?T('viewer.noFeatures',{},text):text;}
-  function sourceText(source){const known={'3D stereoisomer comparison':'viewer.sceneSource','Backend conformer sampling':'viewer.conformerSource','Selected stereoisomer conformer':'viewer.selectedSource','Possible stereoisomers':'viewer.possibleSource'};if(known[source])return T(known[source]);const imported=/^RDKit (SMILES|JSON|MOL|SDF) import$/.exec(source||'');return imported?T('explorer.importSource',{format:imported[1]}):source;}
+  function sourceText(source){const known={'Local systematic name parser':'reason.parsedName','Offline name map':'reason.familiarName','3D stereoisomer comparison':'viewer.sceneSource','Backend conformer sampling':'viewer.conformerSource','Selected stereoisomer conformer':'viewer.selectedSource','Possible stereoisomers':'viewer.possibleSource'};if(known[source])return T(known[source]);const imported=/^RDKit (SMILES|JSON|MOL|SDF) import$/.exec(source||'');return imported?T('explorer.importSource',{format:imported[1]}):source;}
   const state = { labView:'explorer', pendingScene:null, sortReference:null, clouds:false, lonePairs:false, together:false, electronShapes:[], sceneGeometries:[], result: null, filtered: [], selected: null, mode: '3d', hydrogens: true, labels: false, rotating: false, viewer: null, initialView: null, renderFailed: false, busy: false, generation: 0, visibleLimit: 40 };
   const layoutCache = new Map(), geomCache = new Map(), imageCache = new Map();
   let visibilityFrame=null;
@@ -483,7 +504,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   }
   function parseQuery(text) {
     const mode=$('input-mode').value;
-    if(mode==='name'||mode==='smiles'||/^(?:name|smiles)\s*:/i.test(text.trim())||Chem.supportedNames.includes(text.trim().toLowerCase())) return MoleculeFormats.parseEntry(text,mode);
+    if(mode==='name'||mode==='smiles'||/^(?:name|smiles)\s*:/i.test(text.trim())) return MoleculeFormats.parseEntry(text,mode);
     let formula=text.replace(/[₀-₉]/g,d=>String('₀₁₂₃₄₅₆₇₈₉'.indexOf(d))), filter=null;
     const words = [
       ['primary halogenoalkanes?','primary-halogenoalkane'],['secondary halogenoalkanes?','secondary-halogenoalkane'],['tertiary halogenoalkanes?','tertiary-halogenoalkane'],
@@ -491,7 +512,12 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
       ['primary alcohols?','primary-alcohol'],['secondary alcohols?','secondary-alcohol'],['tertiary alcohols?','tertiary-alcohol'],['carboxylic acids?','carboxylic-acid'],
       ['halogenoalkanes?','halogenoalkane'],['haloalkanes?','halogenoalkane'],['alcohols?','alcohol'],['aldehydes?','aldehyde'],['ketones?','ketone'],['ethers?','ether'],['esters?','ester'],['amines?','amine'],['amides?','amide'],['nitriles?','nitrile'],['alkanes?','alkane'],['alkenes?','alkene'],['alkynes?','alkyne'],['cyclic','cyclic']
     ];
-    for(const [phrase,key] of words) { const re=new RegExp('\\b'+phrase+'\\b','i'); if(re.test(formula)){filter=key;formula=formula.replace(re,' ').trim();break;} }
+    for(const [phrase,key] of words) {
+      const re=new RegExp('\\b'+phrase+'\\b','i');if(!re.test(formula))continue;
+      const rest=formula.replace(re,' ').trim();
+      // Filter words apply only to a formula (or the current result), never part of a name.
+      if(!rest || /^(?:[A-Z][a-z]?\d*\s*)+$/.test(rest.replace(/^formula\s*:\s*/i,''))){filter=key;formula=rest;break;}
+    }
     if(!formula.trim() && state.result) formula=state.result.formula;
     return { ...MoleculeFormats.parseEntry(formula.trim(),mode), filter };
   }
@@ -514,8 +540,17 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     return new Promise((resolve,reject)=>setTimeout(()=>{try{resolve(Chem.enumerate(parsed));}catch(e){reject(e);}},25));
   }
   function importedResult(isomers,source) { return {...isomers[0].metadata,complete:false,source,imported:true,mixedFormulas:new Set(isomers.map(g=>g.formula)).size>1,isomers:Chem.sortIsomers(isomers)}; }
+  function renderDeduction(result) {
+    const proof=result.deduction;
+    $('formula-reasoning').hidden=!proof;
+    if(!proof)return;
+    ui('formula-conclusion','reason.conclusion',{formula:prettyFormula(result.formula),count:result.isomers.length});
+    ui('reason-hydrogen','reason.hydrogens',{limit:proof.hydrogenLimit,h:result.counts.H||0,units:result.dbe});
+    ui('reason-skeletons','reason.skeletons',{count:proof.skeletons});
+    ui('reason-layers',proof.layers.length?'reason.layers':'reason.saturated',{counts:proof.layers.join(' → ')});
+  }
   function setResults(result,preferredName) {
-    cancelPendingScene();
+    cancelPendingScene();renderDeduction(result);
     state.together=false;$('together-button').setAttribute('aria-pressed','false');
     state.result=result;state.sortReference=result.isomers[0]||null;state.visibleLimit=40;ui(document.querySelector('.index-title'),result.imported?'explorer.imported':'explorer.results');applyFilter(preferredName);
     ui('calculation-status',result.imported?'explorer.importedStatus':result.isomers.length?'explorer.completeStatus':'explorer.noneStatus',()=>({source:sourceText(result.source)}));
@@ -531,11 +566,14 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
       let query;const text=$('formula-input').value;
       try{query=parseQuery(text);}catch(error){
         const mode=$('input-mode').value,formulaLike=/^(?:formula\s*:\s*)?(?:[A-Z][a-z]?\d*)+(?:\s+(?:alcohol|ether|alkane))?$/.test(text.trim())&&(/\d/.test(text)||mode==='formula');
-        if(!ChemistryClient.available||mode==='formula'||mode==='name'||formulaLike)throw error;
-        const parsed=await ChemistryClient.parse(text.replace(/^smiles\s*:\s*/i,''),'smiles',{signal:controller.signal});query={kind:'structures',isomers:parsed.molecules,source:'RDKit structure input'};
+        query=await ChemistryClient.parseNameFallback(text,mode,error,{signal:controller.signal});
+        if(!query){
+          if(error.code==='UNSUPPORTED_NAME'||!ChemistryClient.available||mode==='formula'||mode==='name'||formulaLike)throw error;
+          const parsed=await ChemistryClient.parse(text.replace(/^smiles\s*:\s*/i,''),'smiles',{signal:controller.signal});query={kind:'structures',isomers:parsed.molecules,source:'RDKit structure input'};
+        }
       }
       if(query.kind==='structures'&&ChemistryClient.available&&!query.isomers.every(R.isRecord)){
-        const records=[];for(const g of query.isomers){const parsed=await ChemistryClient.parse(g.notation,'smiles',{signal:controller.signal});records.push(...parsed.molecules.map(m=>g.knownName&&!m.knownName?{...m,name:g.name,knownName:true,nameSource:'Offline connectivity name map'}:m));}query={...query,isomers:records,source:'RDKit structure input'};
+        const records=[];for(const g of query.isomers){const parsed=await ChemistryClient.parse(g.notation,'smiles',{signal:controller.signal});records.push(...parsed.molecules.map(m=>g.knownName&&(query.fromName||!m.knownName)?{...m,name:g.name,knownName:true,nameSource:g.nameSource||'Offline connectivity name map'}:m));}query={...query,isomers:records,source:query.fromName?query.source:'RDKit structure input'};
       }
       if(query.filter)$('group-filter').value=query.filter;else if(query.kind==='structures')$('group-filter').value='all';
       ui('find-label',query.kind==='structures'?'shell.openStructure':'shell.find');ui('busy-label',query.kind==='formula'?'explorer.finding':'explorer.preparing');
@@ -581,6 +619,9 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     state.selected=iso;$('name-consent').checked=false;ui('name-feedback','viewer.empty');
     $('isomer-list').querySelectorAll('.isomer-card').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===iso.id)));
     $('selected-name').textContent=iso.name;ui('selected-description','viewer.description',()=>({group:allDescriptions(iso),stereo:stereoText(iso)}));
+    const generated=SystematicNames.generate(iso);
+    $('connectivity-name').hidden=!generated;
+    $('connectivity-name-value').textContent=generated?.name||'';
     const meta=iso.metadata||state.result;
     $('stage-formula').innerHTML=formulaHTML(iso.formula)+(iso.charge?'<sup>'+(Math.abs(iso.charge)>1?Math.abs(iso.charge):'')+(iso.charge>0?'+':'−')+'</sup>':'');
     $('explore-formula').hidden=!state.result.imported||!!iso.charge;$('mass-value').textContent=meta.mass.toFixed(2)+' g/mol';$('atoms-value').textContent=Object.values(meta.counts).reduce((a,b)=>a+b,0);$('dbe-value').textContent=Number.isFinite(meta.dbe)?meta.dbe+' DBE':'Not assigned';$('selected-smiles').textContent=iso.notation;

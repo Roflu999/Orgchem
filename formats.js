@@ -9,9 +9,9 @@
     const prefix = text.match(/^(formula|smiles|name)\s*:\s*/i);
     if (prefix) { mode = prefix[1].toLowerCase(); text = text.slice(prefix[0].length); }
     if (mode === 'formula') return { kind: 'formula', parsed: C.parseFormula(text) };
-    if (mode === 'name') return { kind: 'structures', isomers: [C.resolveName(text)], source: 'Offline name map' };
+    if (mode === 'name') { const iso = C.resolveName(text); return { kind:'structures', isomers:[iso], source:iso.nameSource, fromName:true }; }
     if (mode === 'smiles') return { kind: 'structures', isomers: [C.describe(C.readSmiles(text))], source: 'SMILES import' };
-    if (C.supportedNames.includes(text.toLowerCase())) return parseEntry(text, 'name');
+    if (C.looksLikeName(text)) return parseEntry(text, 'name');
     const normalized = text.replace(/[₀-₉]/g, d => String('₀₁₂₃₄₅₆₇₈₉'.indexOf(d))).replace(/\s+/g, '');
     const tokens=[...normalized.matchAll(/([A-Z][a-z]?)(\d*)/g)];
     if (/^(?:[A-Z][a-z]?\d*)+$/.test(normalized) && new Set(tokens.map(t=>t[1])).size===tokens.length && (/H/.test(normalized)||/\d/.test(normalized))) return parseEntry(normalized, 'formula');
@@ -72,7 +72,9 @@
     if(format==='auto') {
       if(/V(?:2000|3000)/.test(text))format=text.includes('$$$$')?'sdf':'mol';
       else if(/^\s*[\[{]/.test(text) && !/^\s*\[(?:Cl|Br|C|N|O|F|I|H)/.test(text))format='json';
-      else if(/\.smi(?:les)?$/i.test(filename) || text.includes('\n') || /[=#()\[\]]/.test(text))format='smiles';
+      else if(/\.smi(?:les)?$/i.test(filename) || text.trim().includes('\n'))format='smiles';
+      else if(C.looksLikeName(text))return parseEntry(text);
+      else if(/[=#()\[\]]/.test(text))format='smiles';
       else return parseEntry(text);
     }
     let isomers;

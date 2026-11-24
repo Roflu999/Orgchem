@@ -80,9 +80,15 @@ Disconnected legacy drawings are separate scene structures. Imported salts/multi
 
 Drafts stay in memory across workspace switches, not across a reload. Export to save chemistry and conformers. **Ideal bond angles** is a legacy 2D layout operation; toolkit depictions and generated conformers use their own authoritative geometry. A flat sp³ zigzag is a projection, not a literal 109.5° tetrahedron.
 
+## Reading an unfamiliar structure
+
+Paste `N#CCC1CC(O)CC1` as SMILES and open **Reading the structure → Inspect the evidence** below the viewer. No compound name is needed. The nitrile is recognized from a carbon–nitrogen triple bond; the alcohol from an O–H attached to saturated carbon. The panel reports one independent ring and, under RDKit’s hydrogen-bond rules, one potential donor site and two acceptor sites. Atom IDs in the evidence correspond to **Text description of this molecule**. No external naming service is queried.
+
+Motif rules recognize local bonding patterns, not every functional group. A missing match is not proof that a molecule lacks functional groups. Donor/acceptor counts describe potential sites, not observed interactions or measured solubility. Counts are withheld outside the supported neutral organic model. Offline formula candidates instead show the ring and multiple-bond contributions and whether O–H or N–H sites are present. For example, try `C2H6O` and switch between the alcohol and ether: the atom counts agree but the hydrogen-bond evidence changes. The formula on its own cannot choose between them.
+
 ## Names and electron illustrations
 
-Formula, mapped identifiers and isomeric SMILES are available independently of a name. RDKit is not a universal IUPAC name generator. A small offline name set supplies familiar examples; **Look up a database name** optionally sends the selected isomeric SMILES to PubChem only after explicit consent. A returned name is used only for an exact charge/isotope/stereo identity match. No approximate database name is silently substituted. Remote availability and database coverage are not guaranteed.
+Formula, mapped identifiers and isomeric SMILES are available independently of a name. In the explorer, enter an English name such as `3-methylhexan-2-ol` or `acetone` to open its structure. Supported systematic names are assembled from the parent chain, locants and substituents. In the other direction, the viewer derives **connectivity-only systematic names** for supported acyclic structures (up to 12 carbons, simple alkyl/halogen branches and at most one supported principal group or multiple bond). Assigned stereochemistry remains separate; neither direction provides universal IUPAC coverage. See [name input and limits](NAMING.md). A small offline name set supplies familiar examples; **Look up a database name** optionally sends the selected isomeric SMILES to PubChem only after explicit consent. A returned name is used only for an exact charge/isotope/stereo identity match. No approximate database name is silently substituted. Remote availability and database coverage are not guaranteed.
 
 **π clouds** are qualitative teaching surfaces for explicit alternating carbon six-rings and carbon multiple bonds. **Lone pairs** are symbolic paired-dot markers. Toolkit records use valence/formal-charge-based lone-pair counts where chemically supported; unsupported electron-domain models are not guessed. These are not quantum calculations or total electron densities. Classical C⁺ has an empty p orbital, not an occupied electron cloud. The limited illustration geometry has its own declared support/budget independently of broader molecule parsing.
 
@@ -133,11 +139,15 @@ Configuration: `BOND_ATLAS_WORKERS`, `BOND_ATLAS_QUEUE`, `BOND_ATLAS_TIMEOUT`, `
 
 ## Offline constitutional isomer explorer
 
-The existing browser worker still enumerates connected neutral, closed-shell constitutional bond graphs under its original model: C(4), N(3), O(2), halogens(1), carbon required. Limits: 12 heavy atoms at DBE 0; 10 at DBE 1; 9 at DBE 2; 7 at DBE 3–4. Searches stop at 22 seconds or over 12,000 candidates without labeling partial results complete. This feature is separate from opening a larger supplied toolkit structure or enumerating its stereo assignments.
+Enter `C4H6` and open **Follow the deduction**. Four carbons in an open, single-bonded structure could hold ten H. Six H leave two units to account for: two double bonds, a triple bond, a ring and a double bond, or two independent rings. The worker builds two distinct single-bond skeletons, finds five arrangements after one added bond unit, then nine after two. These counts come from that search, before any sidebar filter; the results are not fetched from a stored formula-to-structures list. Only generic tree shapes are reused. **Go to structures** moves keyboard focus to the results.
+
+The worker enumerates connected neutral, closed-shell constitutional bond graphs under this model: C(4), N(3), O(2), halogens(1), carbon required. Limits: 12 heavy atoms at DBE 0; 10 at DBE 1; 9 at DBE 2; 7 at DBE 3–4. Searches stop at 22 seconds or over 12,000 candidates without labeling partial results complete. This feature is separate from opening a larger supplied toolkit structure or enumerating its stereo assignments.
 
 Known counts retained by regression tests include C₂H₆O = 2, C₄H₁₀O = 7, C₄H₉Br = 4, C₈H₁₈ = 18, C₁₀H₂₂ = 75, C₁₂H₂₆ = 355. The reactivity/strain penalty is an educational structural heuristic, never a thermodynamic stability or safety assessment.
 
 ## Verification
+
+For the lightweight live interaction check against the local server, see [DOM check setup and scope](BROWSER_CHECK.md). It exercises the formula and naming flows without claiming to test pixels, WebGL or native screen-reader behavior.
 
 ```sh
 node test.js

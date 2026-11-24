@@ -13,15 +13,16 @@ import time
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
+from . import opsin
 from .jobs import JobManager
 from .models import JobRequest, JobResponse
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC_FILES = {
-    "chemistry.js", "chemistry-worker.js", "geometry.js", "formats.js", "interchange-ui.js",
+    "chemistry.js", "systematic-name.js", "chemistry-worker.js", "geometry.js", "formats.js", "interchange-ui.js",
     "sketcher-model.js", "sketcher-ui.js", "scene.js", "orbitals.js", "projections.js",
     "isomer-types.js", "textbook-ui.js", "molecule-record.js", "chemistry-client.js",
-    "stereo-ui.js", "stereo.css", "workbench.css", "quantum-grid.js",
+    "stereo-ui.js", "stereo.css", "workbench.css", "quantum-grid.js", "structure-notes.js",
     "atlas-i18n.js", "atlas-locales.js", "atlas-shell-locales.js", "atlas-preferences.js", "atlas-fonts.css", "viewer-lifecycle.js",
 }
 FONT_FILES = frozenset(item["name"] for item in json.loads((ROOT / "vendor/fonts/manifest.json").read_text())["files"]
@@ -41,6 +42,9 @@ def settings():
 
 @asynccontextmanager
 async def lifespan(application):
+    # Probe once at startup, not once per capabilities request. A missing jar,
+    # incompatible JVM, or broken CLI must not disable ordinary RDKit jobs.
+    application.state.opsin_available = await opsin.available()
     application.state.jobs = JobManager(**settings())
     async def reap():
         while True:
@@ -104,8 +108,10 @@ async def capabilities():
         rdkit_version = None
     return {"schema": "bond-atlas/3", "available": available, "rdkitVersion": rdkit_version,
             "stereoisomers": available, "conformers": available, "stereoPreservingFormats": available,
+            "opsinAvailable": available and app.state.opsin_available,
             "privacy": "Structures are processed on this website's server, kept temporarily in memory, and not sent to third-party services unless you explicitly request and consent to a PubChem name lookup.",
-            "limits": {"atoms": 256, "stereoisomers": 64, "conformers": 50, "inputBytes": MAX_BODY, **settings()}}
+            "limits": {"atoms": 256, "stereoisomers": 64, "conformers": 50, "inputBytes": MAX_BODY,
+                       "nameChars": opsin.MAX_NAME_CHARS, **settings()}}
 
 
 @app.post("/api/v1/jobs", status_code=202, response_model=JobResponse)

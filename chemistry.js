@@ -4,7 +4,7 @@
   'use strict';
   const VAL = { C: 4, N: 3, O: 2, F: 1, Cl: 1, Br: 1, I: 1 };
   const MASS = { C: 12.011, H: 1.008, N: 14.007, O: 15.999, F: 18.9984, Cl: 35.45, Br: 79.904, I: 126.9045 };
-  const treeCache = new Map(), cache = new Map(), names = new Map(), aliases = new Map(), nameGraphs = new Map();
+  const treeCache = new Map(), names = new Map(), aliases = new Map(), nameGraphs = new Map();
   const bondChar = o => o === 2 ? '=' : o === 3 ? '#' : '';
   const clone = g => ({ atoms: g.atoms.slice(), m: g.m.map(r => r.slice()) });
   const neighbors = (g, i) => g.m[i].map((v, j) => v ? j : -1).filter(j => j >= 0);
@@ -247,10 +247,19 @@
     const formula = formulaOf(h);
     return { id: key, name: name || names.get(key) || 'Imported structure', knownName: names.has(key), notation: smiles(h), tags: tagsFor(h), atoms: h.atoms, bonds, hydrogens: h.atoms.map((e, i) => VAL[e] - used(h, i)), formula, metadata: parseFormula(formula, { enumeration: false }), stability: stabilityFor(h) };
   }
+  // Offline records represent a single connected component, with hydrogens folded
+  // into their parent atoms. Count graph features, not entries in the name map.
+  function offlineInsights(g) {
+    const independentRingCount = g.bonds.length - g.atoms.length + 1;
+    const doubles = g.bonds.filter(b => b.order === 2).length;
+    const triples = g.bonds.filter(b => b.order === 3).length;
+    const donorSites = g.atoms.flatMap((e, i) =>
+      (e === 'O' || e === 'N') && g.hydrogens[i] > 0 ? [i] : []);
+    return { independentRingCount, doubles, triples, donorSites };
+  }
   function sortIsomers(isomers) { return isomers.sort((a, b) => a.stability.score - b.stability.score || Number(b.knownName) - Number(a.knownName) || a.name.localeCompare(b.name) || a.notation.localeCompare(b.notation)); }
   function enumerate(input, options = {}) {
     const p = parseFormula(typeof input === 'string' ? input : input.formula);
-    if (cache.has(p.formula)) return cache.get(p.formula);
     const elements = Object.keys(p.counts).filter(e => e !== 'H').sort(), remaining = Object.fromEntries(elements.map(e => [e, p.counts[e]]));
     const startTime = Date.now(); let operations = 0, lastProgress = 0, stage = 'Building atom skeletons';
     deadline = startTime + LIMITS.milliseconds;
@@ -270,6 +279,8 @@
         }
         label(0);
       }
+      // Keep just the counts needed to explain this run; no formula-to-results library.
+      const deduction = { hydrogenLimit:(p.counts.H || 0) + 2 * p.dbe, skeletons:graphs.size, layers:[] };
       for (let k = 0; k < p.dbe; k++) {
         stage = 'Assigning rings and bond orders (' + (k + 1) + '/' + p.dbe + ')';
         const next = new Map();
@@ -281,15 +292,14 @@
           }
         }
         graphs = next;
+        deduction.layers.push(graphs.size);
       }
       stage = 'Ranking connectivity and reactive motifs';
       const isomers = [];
-      for (const raw of graphs.values()) { budget(isomers.length); if (formulaOf(raw) === p.formula) { const iso = describe(raw); if (!iso.knownName) iso.name = ''; isomers.push(iso); } }
+      for (const raw of graphs.values()) { budget(isomers.length); if (formulaOf(raw) === p.formula) { const iso = describe(raw); if (!iso.knownName) iso.name = root.SystematicNames?.generate(iso)?.name || ''; isomers.push(iso); } }
       sortIsomers(isomers);
       isomers.forEach((g, i) => { if (!g.name) g.name = 'Structural isomer ' + (i + 1); });
-      const result = { ...p, complete: true, scope: 'All connected, neutral, closed-shell valence graphs within the supported formula and time limits. Ranked by a transparent structural-reactivity heuristic, not measured stability. Stereochemistry and resonance normalization are not applied.', isomers };
-      if (cache.size >= 8) cache.delete(cache.keys().next().value);
-      cache.set(p.formula, result); return result;
+      return { ...p, deduction, complete: true, scope: 'All connected, neutral, closed-shell valence graphs within the supported formula and time limits. Ranked by a transparent structural-reactivity heuristic, not measured stability. Stereochemistry and resonance normalization are not applied.', isomers };
     } finally { deadline = Infinity; }
   }
   const templates = [
@@ -306,11 +316,134 @@
   for (const [x, suffix] of [['Cl','chlor'],['Br','brom'],['F','fluor'],['I','iod']]) {
     for (const [s, name] of [ ['C'+x,suffix+'omethane'],['CC'+x,'1-'+suffix+'oethane'],['CCC'+x,'1-'+suffix+'opropane'],['CC('+x+')C','2-'+suffix+'opropane'],['CCCC'+x,'1-'+suffix+'obutane'],['CCC('+x+')C','2-'+suffix+'obutane'],['CC(C)C'+x,'1-'+suffix+'o-2-methylpropane'],['CC(C)(C)'+x,'2-'+suffix+'o-2-methylpropane'] ]) { const g = readSmiles(s); const nameCase = name[0].toUpperCase()+name.slice(1); names.set(canonical(g).key,nameCase); aliases.set(name.toLowerCase(), formulaOf(g)); nameGraphs.set(name.toLowerCase(),g); }
   }
-  aliases.set('acetone','C3H6O'); aliases.set('isopropanol','C3H8O'); aliases.set('diethyl ether','C4H10O'); aliases.set('acetic acid','C2H4O2');
+  for (const [s, name] of [
+    ['C=O','Methanal'], ['C(=O)O','Methanoic acid'], ['CCC(=O)O','Propanoic acid'],
+    ['CCCC(=O)O','Butanoic acid'], ['CC(=O)OCC','Ethyl ethanoate'], ['CC(=O)OC','Methyl ethanoate'],
+    ['OCC(O)CO','Propane-1,2,3-triol'], ['CC(O)CO','Propane-1,2-diol'],
+    ['ClCCl','Dichloromethane'], ['ClC(Cl)Cl','Trichloromethane'], ['ClC(Cl)(Cl)Cl','Tetrachloromethane'],
+    ['CC1=CC=CC=C1','Methylbenzene'], ['C1=CC=C(C=C1)O','Phenol'], ['C1=CC=C(C=C1)N','Aniline'],
+    ['COC1=CC=CC=C1','Methoxybenzene'], ['C=CC1=CC=CC=C1','Ethenylbenzene'],
+    ['C1CCOC1','Oxolane'], ['C1=CC=NC=C1','Pyridine'],
+    ['CC(=O)OC1=CC=CC=C1C(=O)O','Acetylsalicylic acid'], ['CC(=O)NC1=CC=C(O)C=C1','Paracetamol'],
+    ['CN1C(=O)C2=C(N=CN2C)N(C)C1=O','Caffeine']
+  ]) register(s, name);
   const synonyms = { acetone:'propanone', isopropanol:'propan-2-ol', 'isopropyl alcohol':'propan-2-ol', 'diethyl ether':'ethoxyethane', 'dimethyl ether':'methoxymethane', 'acetic acid':'ethanoic acid', acetylene:'ethyne', ethylene:'ethene', propylene:'propene', 'tert-butanol':'2-methylpropan-2-ol', 'isobutane':'2-methylpropane', '1-butyne':'but-1-yne', '2-butyne':'but-2-yne', '1-butanol':'butan-1-ol', '2-butanol':'butan-2-ol' };
+  Object.assign(synonyms, {
+    'methyl alcohol':'methanol', 'ethyl alcohol':'ethanol', 'n-propanol':'propan-1-ol', 'n-butanol':'butan-1-ol',
+    'isobutyl alcohol':'2-methylpropan-1-ol', 'tert-butyl alcohol':'2-methylpropan-2-ol',
+    'neopentane':'2,2-dimethylpropane', 'isopentane':'2-methylbutane',
+    'formaldehyde':'methanal', 'acetaldehyde':'ethanal', 'formic acid':'methanoic acid',
+    'propionic acid':'propanoic acid', 'butyric acid':'butanoic acid', 'ethyl acetate':'ethyl ethanoate',
+    'methyl acetate':'methyl ethanoate', 'glycerol':'propane-1,2,3-triol', 'glycerin':'propane-1,2,3-triol',
+    'ethylene glycol':'ethane-1,2-diol', 'propylene glycol':'propane-1,2-diol',
+    'chloroform':'trichloromethane', 'methylene chloride':'dichloromethane', 'carbon tetrachloride':'tetrachloromethane',
+    'toluene':'methylbenzene', 'anisole':'methoxybenzene', 'styrene':'ethenylbenzene', 'tetrahydrofuran':'oxolane',
+    'acetonitrile':'ethanenitrile', 'methylamine':'methanamine', 'ethylamine':'ethanamine',
+    'aspirin':'acetylsalicylic acid', 'acetaminophen':'paracetamol'
+  });
   Object.entries(synonyms).forEach(([alias, name]) => { nameGraphs.set(alias, nameGraphs.get(name)); aliases.set(alias, formulaOf(nameGraphs.get(name))); });
-  function resolveName(name) { const g = nameGraphs.get(String(name).toLowerCase().trim()); if (!g) throw Error('Name not in the offline name map. Try SMILES, a molecular formula, or a MOL/SDF file.'); return describe(g); }
-  const api = { parseFormula, enumerate, tagsFor, smiles, readSmiles, canonical, formulaOf, normalizeGraph, describe, stabilityFor, sortIsomers, resolveName, supportedNames: [...nameGraphs.keys()], LIMITS, VAL };
+
+  // Forward grammar only; neither canonical IUPAC name generation nor a fuzzy search.
+  const stems = 'meth eth prop but pent hex hept oct non dec undec dodec'.split(' ');
+  const parentPattern = new RegExp('^(cyclo)?(' + stems.join('|') + ')(.*)$');
+  const esterAlkyl = new RegExp('^(' + stems.join('|') + ')yl ');
+  const branches = { methyl:['C'], ethyl:['C','C'], propyl:['C','C','C'], butyl:['C','C','C','C'],
+    methoxy:['O','C'], ethoxy:['O','C','C'], fluoro:['F'], chloro:['Cl'], bromo:['Br'], iodo:['I'], hydroxy:['O'], amino:['N'] };
+  const prefixPattern = new RegExp('^(?:([1-9]\\d?(?:,[1-9]\\d?)*)-)?(di|tri|tetra)?(' + Object.keys(branches).join('|') + ')');
+  const multiplicity = {di:2,tri:3,tetra:4};
+  function normalizeName(s) { return String(s).trim().toLowerCase().replace(/[‐-—−]/g,'-').replace(/\s+/g,' '); }
+  function nameError(message) { return Object.assign(Error(message), {code:'UNSUPPORTED_NAME'}); }
+  function looksLikeName(s) {
+    const text = normalizeName(s);
+    if (nameGraphs.has(text) || /^name\s*:/.test(text)) return true;
+    // Do not steal valid (including aromatic/bracket/stereo) SMILES from the toolkit.
+    if (/^(?:Cl|Br|[BCNOFPSIbcnops\d()\-])+$/.test(String(s).trim())) return false;
+    return /^[a-z\d ,()\-]+$/.test(text) && (/(?:ane|ene|yne|ol|one|anal|amine|amide|acid|oate|nitrile)$/.test(text) ||
+      (String(s).match(/[a-z]{2,}/g) || []).some(word => /[^bcnops]/.test(word)));
+  }
+  function parseSystematicName(text) {
+    const unsupported = () => nameError('Name not in the offline name map or supported systematic grammar. Try e.g. 3-methylhexan-2-ol, or enter SMILES.');
+    if (/^(?:\((?:\d*[rsez]|[+-])|(?:cis|trans|rac|meso|[rsez])-)/.test(text)) throw nameError('Stereochemical descriptors are not supported in name input. Enter isomeric SMILES in the RDKit workspace; the descriptor will not be discarded.');
+    const ester = esterAlkyl.exec(text);
+    if (ester) text = text.slice(ester[0].length);
+    const prefixes = [];
+    let token;
+    while ((token = prefixPattern.exec(text))) {
+      prefixes.push({positions:token[1], multiple:token[2], group:token[3]});
+      text = text.slice(token[0].length);
+      if (text.startsWith('-') && /^-\d/.test(text)) text = text.slice(1);
+      else break; // the final prefix joins the parent without a hyphen
+    }
+    const parent = parentPattern.exec(text);
+    if (!parent) throw unsupported();
+    const ring = !!parent[1], n = stems.indexOf(parent[2]) + 1, suffix = parent[3];
+    if (ring && n < 3) throw nameError('A ring parent must contain at least three carbons.');
+    const g = {atoms:[], m:[]};
+    function bond(a,b,order) { g.m[a][b] = g.m[b][a] = order; }
+    function atom(e, from, order = 1) {
+      const i = g.atoms.length;
+      if (i >= LIMITS.view) throw nameError('Name input supports up to 64 non-hydrogen atoms.');
+      g.atoms.push(e); for (const row of g.m) row.push(0); g.m.push(Array(i+1).fill(0));
+      if (from !== undefined) bond(from,i,order);
+      return i;
+    }
+    function positions(spec, multiple, max, defaults) {
+      if (!spec && !defaults) throw nameError('Supply explicit position numbers (locants) for this name; no position was assumed.');
+      const p = spec ? spec.split(',').map(Number) : defaults;
+      if (p.length !== (multiplicity[multiple] || 1)) throw nameError('The number of locants must match the multiplicative prefix.');
+      if (p.some(i => i < 1 || i > max)) throw nameError('A locant is outside the parent chain or bond range.');
+      return p.map(i => i-1);
+    }
+    for (let i=0; i<n; i++) atom('C', i ? i-1 : undefined);
+    if (ring) bond(n-1,0,1);
+    let terminal = false, m;
+    if (ester && suffix !== 'anoate') throw unsupported();
+    if (suffix === 'ane') { /* complete saturated parent */ }
+    else if ((m = /^(?:-([1-9]\d?)-)?(ene|yne)$/.exec(suffix)) ||
+             (m = /^a-([1-9]\d?(?:,[1-9]\d?)+)-(di|tri|tetra)(ene|yne)$/.exec(suffix))) {
+      // Multiple bonds use the index of the first atom of the named bond.
+      const sites = positions(m[1], m.length===4 ? m[2] : null, ring?n:n-1, ring || n===2 || (n===3 && !prefixes.length) ? [1] : null);
+      if (new Set(sites).size !== sites.length) throw nameError('Each multiple bond requires a distinct locant.');
+      for (const i of sites) bond(i,(i+1)%n,m[m.length-1]==='ene'?2:3);
+    } else if ((m = /^an(?:-([1-9]\d?)-)?(ol|one|amine)$/.exec(suffix)) ||
+               (m = /^ane-([1-9]\d?(?:,[1-9]\d?)+)-(di|tri|tetra)(ol|one|amine)$/.exec(suffix))) {
+      const group = m[m.length-1], ketone = group === 'one';
+      const defaults = ring ? [1] : ketone ? (n===3 || (n===4 && !prefixes.length) ? [2] : null) : n===1 || (n===2 && !prefixes.length) ? [1] : null;
+      for (const i of positions(m[1], m.length===4 ? m[2] : null, n, defaults)) {
+        if (ketone && !ring && (i===0 || i===n-1)) throw nameError('A ketone requires an internal carbonyl carbon.');
+        atom(group==='amine'?'N':'O',i,ketone?2:1);
+      }
+    } else if (['anal','anoic acid','anamide','anenitrile','anoate'].includes(suffix)) {
+      if (ring || (suffix === 'anoate' && !ester)) throw unsupported();
+      terminal = true;
+      if (suffix === 'anenitrile') atom('N',0,3);
+      else {
+        atom('O',0,2);
+        if (suffix === 'anamide') atom('N',0);
+        if (suffix === 'anoic acid' || ester) {
+          let last = atom('O',0);
+          if (ester) for (let i=0; i<=stems.indexOf(ester[1]); i++) last = atom('C',last);
+        }
+      }
+    } else throw unsupported();
+    for (const {positions:spec, multiple, group} of prefixes) {
+      const symmetric = suffix === 'ane' && prefixes.length === 1 && (n===2 || ring) && !multiple;
+      for (const i of positions(spec, multiple, n, n===1 || symmetric ? Array(multiplicity[multiple]||1).fill(1) : null)) {
+        if (terminal && i===0) throw nameError('Cannot substitute the terminal functional-group carbon in this grammar.');
+        let last = i;
+        for (const element of branches[group]) last = atom(element,last);
+      }
+    }
+    return g;
+  }
+  function resolveName(name) {
+    if (String(name).length > 180) throw nameError('Enter a chemical name of up to 180 characters.');
+    const text = normalizeName(name), known = nameGraphs.get(text);
+    if (known) return {...describe(known), nameSource:'Offline name map'};
+    try { return {...describe(parseSystematicName(text), text), knownName:true, nameSource:'Local systematic name parser'}; }
+    catch (e) { throw e.code === 'UNSUPPORTED_NAME' ? e : nameError(e.message); }
+  }
+  const api = { parseFormula, enumerate, tagsFor, offlineInsights, smiles, readSmiles, canonical, formulaOf, normalizeGraph, describe, stabilityFor, sortIsomers, resolveName, looksLikeName, supportedNames: [...nameGraphs.keys()], LIMITS, VAL };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.Chem = api;
 })(typeof self !== 'undefined' ? self : globalThis);

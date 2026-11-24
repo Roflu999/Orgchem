@@ -39,9 +39,20 @@
       if(app.state.busy)throw Error('Wait for the current search or cancel it before importing.');
       const text=$('import-text').value;let format=$('import-format').value;
       await ChemistryClient.ready;
-      if(ChemistryClient.available&& !['formula','name'].includes(format)){
-        let legacy=null;try{legacy=F.parseData(text,format,chosenFilename);}catch(e){if(format==='json'&&!text.includes('bond-atlas/3'))throw e;}
-        if(legacy?.kind==='formula')await importFormula(legacy.parsed.formula);
+      if(ChemistryClient.available&&format!=='formula'){
+        let legacy=null;try{legacy=F.parseData(text,format,chosenFilename);}catch(e){
+          legacy=await ChemistryClient.parseNameFallback(text,format,e,options);
+          if(!legacy&&(format==='name'||e.code==='UNSUPPORTED_NAME'||(format==='json'&&!text.includes('bond-atlas/3'))))throw e;
+        }
+        if(legacy?.source==='OPSIN'){
+          if(!current())return;
+          app.loadStructures(legacy.isomers,legacy.source);window.StereoExplorer?.setMolecules(legacy.isomers,{sync:false});
+        }else if(legacy?.fromName){
+          const named=legacy.isomers[0],parsed=await ChemistryClient.parse(named.notation,'smiles',options);
+          if(!current())return;
+          const records=parsed.molecules.map(m=>({...m,name:named.name,knownName:true,nameSource:named.nameSource}));
+          app.loadStructures(records,legacy.source);window.StereoExplorer?.setMolecules(records,{sync:false});
+        }else if(legacy?.kind==='formula')await importFormula(legacy.parsed.formula);
         else{
           if(format==='auto')format=/V(?:2000|3000)/.test(text)?(text.includes('$$$$')?'sdf':'mol'):/^\s*[\[{]/.test(text)&&!/^\s*\[(?:\d+)?(?:Cl|Br|C|N|O|F|I|H)/.test(text)?'json':'smiles';
           let result;
