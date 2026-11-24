@@ -20,9 +20,9 @@ from .models import JobRequest, JobResponse
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC_FILES = {
     "chemistry.js", "systematic-name.js", "chemistry-worker.js", "geometry.js", "formats.js", "interchange-ui.js",
-    "sketcher-model.js", "sketcher-ui.js", "scene.js", "orbitals.js", "projections.js",
+    "sketcher-model.js", "draft-recovery.js", "sketcher-ui.js", "scene.js", "orbitals.js", "projections.js",
     "isomer-types.js", "textbook-ui.js", "molecule-record.js", "chemistry-client.js",
-    "stereo-ui.js", "stereo.css", "workbench.css", "quantum-grid.js", "structure-notes.js",
+    "stereo-ui.js", "stereo.css", "workbench.css", "quantum-grid.js", "structure-notes.js", "atom-inspection.js",
     "atlas-i18n.js", "atlas-locales.js", "atlas-shell-locales.js", "atlas-preferences.js", "atlas-fonts.css", "viewer-lifecycle.js",
 }
 FONT_FILES = frozenset(item["name"] for item in json.loads((ROOT / "vendor/fonts/manifest.json").read_text())["files"]

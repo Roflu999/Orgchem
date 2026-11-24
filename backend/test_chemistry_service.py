@@ -5,6 +5,7 @@ Run: .venv/bin/python -m unittest discover -s backend -p test_chemistry_service.
 import copy
 import json
 import math
+import re
 import unittest
 from unittest.mock import patch
 
@@ -51,6 +52,34 @@ class ParsingTests(unittest.TestCase):
             self.assertTrue(all(0 <= b["a"] < len(layout["atoms"]) and 0 <= b["b"] < len(layout["atoms"]) for b in layout["bonds"]))
         self.assertEqual(mol["name"], "Ethanol")
         json.dumps(mol, allow_nan=False)
+
+    def test_skeletal_alkenes_use_cip_annotations_or_crossed_unknown_bonds(self):
+        def paths(svg, index):
+            data = re.findall(r"class='bond-" + str(index) + r" atom-\d+ atom-\d+' d='M ([-.\d]+),([-.\d]+) L ([-.\d]+),([-.\d]+)'", svg)
+            return [(complex(float(x), float(y)), complex(float(u), float(v))) for x, y, u, v in data]
+
+        def side(a, b, p):
+            return ((b-a).conjugate() * (p-a)).imag
+
+        for smiles, desc, alias in ((r'C/C=C\C', 'Z', 'cis'), ('C/C=C/C', 'E', 'trans'), ('CC=CC', None, None)):
+            with self.subTest(smiles=smiles):
+                mol = parsed(smiles)
+                stereo, = mol['stereo']['bonds']
+                self.assertEqual((stereo['descriptor'], stereo['cisTrans'], stereo['specified']), (desc, alias, bool(desc)))
+                svg = mol['depictions']['skeletal']
+                (a, b), (c, d) = paths(svg, 1)
+                crossed = side(a,b,c)*side(a,b,d)<0 and side(c,d,a)*side(c,d,b)<0
+                self.assertEqual(crossed, desc is None)
+                self.assertEqual("class='note'" in svg, bool(desc))
+                if desc:
+                    self.assertNotIn("#7F7FFF", svg.upper())
+                    (left, _), = paths(svg, 0)
+                    (_, right), = paths(svg, 2)
+                    self.assertEqual(side(a,b,left)*side(a,b,right)>0, desc == 'Z')
+        substituted = parsed('F/C(Cl)=C(/Br)I')['stereo']['bonds'][0]
+        self.assertEqual(substituted['descriptor'], 'E')
+        self.assertIsNone(substituted['cisTrans'])
+        self.assertEqual(parsed('CC(C)=CC')['stereo']['bonds'], [])
 
     def test_charges_isotopes_aromatic_salt_and_explicit_h_roundtrip(self):
         for smiles in ("[NH4+]", "[NH4+].[Cl-]", "c1ccncc1", "[13CH3][C@@H](O)C(=O)[O-].[Na+]", "[2H]O[H]", "c1cc[nH]c1"):
@@ -234,6 +263,21 @@ class DraftTests(unittest.TestCase):
                     self.assertAlmostEqual(expected["y"], actual["y"])
                 restored = service.dispatch("parse", {"molecule": edited})["molecules"][0]
                 self.assertEqual(restored["id"], original["id"])
+
+    def test_dragging_a_substituent_across_double_bond_does_not_assign_or_invert(self):
+        for smiles in ('C/C=C/C', 'CC=CC'):
+            original = parsed(smiles)
+            draft = self.draft(original)
+            p, a, b = draft['atoms'][:3]
+            # Reflect the first methyl across the alkene axis (a visual E/Z swap).
+            dx, dy = b['x'] - a['x'], b['y'] - a['y']
+            t = ((p['x'] - a['x']) * dx + (p['y'] - a['y']) * dy) / (dx * dx + dy * dy)
+            p['x'], p['y'] = 2 * (a['x'] + t * dx) - p['x'], 2 * (a['y'] + t * dy) - p['y']
+            moved = service.dispatch('parse', {'draft': draft, 'sourceRecord': original})['molecules'][0]
+            self.assertEqual(moved['depictions']['skeletal'], original['depictions']['skeletal'])
+            self.assertEqual(moved['stereo'], original['stereo'])
+            self.assertEqual(moved['layouts']['skeletal']['atoms'][0]['x'], p['x'])
+            self.assertEqual(service.dispatch('parse', {'molecule': moved})['molecules'][0]['id'], original['id'])
 
     def test_position_only_keeps_independent_3d_states(self):
         original = generated("C[C@H](O)C(=O)O")["molecule"]

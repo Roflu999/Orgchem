@@ -97,6 +97,40 @@ function browser(client) {
     const replaced=M.setBond(M.removeBond(d,0,1),0,1,1);assert.notEqual(replaced.bonds.at(-1).id,d.bonds[0].id);
     assert.equal(JSON.stringify(d),original);assert.deepEqual(changed.sourceRecord,d.sourceRecord);
   });
+  await test('elastic drag moves bonded neighbors, leaves other fragments still, and preserves mapped chemistry',()=>{
+    const d=freeze(M.fromStructure(record(['C','O','Cl'],[[0,1,1]])));
+    const moved=M.elasticDrag(d,[0],50,12);
+    assert.equal(moved.atoms[0].x,d.atoms[0].x+50);
+    assert.notDeepEqual(moved.atoms[1],d.atoms[1]);assert.deepEqual(moved.atoms[2],d.atoms[2]);
+    assert.equal(M.chemicalSignature(moved),M.chemicalSignature(d));
+  });
+  await test('free and idealized Move constrain drawing angles only; tidy is not a persistent lock',()=>{
+    for(const [name,target] of [['Propane',120],['But-1-yne',180]]){
+      const b=browser(); b.api.showBuilder(Chem.resolveName(name));
+      const original=b.api.getDraft(), neighbors=i=>original.bonds.filter(e=>e.a===i||e.b===i).map(e=>e.a===i?e.b:e.a);
+      const end=original.atoms.findIndex((_,i)=>neighbors(i).length===1&&(target===120||original.bonds.some(e=>(e.a===i||e.b===i)&&e.order===3)));
+      const [pivot]=neighbors(end),ref=neighbors(pivot).find(i=>i!==end);
+      const angle=()=>{const atoms=b.api.getDraft().atoms,p=atoms[pivot],a=atoms[end],v=atoms[ref];return Math.abs(Math.atan2((a.x-p.x)*(v.y-p.y)-(a.y-p.y)*(v.x-p.x),(a.x-p.x)*(v.x-p.x)+(a.y-p.y)*(v.y-p.y)))*180/Math.PI;};
+      b.moveAtom(end,'ArrowUp');assert(Math.abs(angle()-target)>0.01,'free move does not snap');
+      b.change('builder-angle-mode','ideal');b.moveAtom(end,'ArrowDown');assert(Math.abs(angle()-target)<1e-7);
+      assert.deepEqual(b.api.getDraft().bonds,original.bonds);
+      b.change('builder-angle-mode','free'); b.$('builder-ideal').emit('click'); b.moveAtom(end,'ArrowUp');assert(Math.abs(angle()-target)>0.01);
+    }
+  });
+  await test('2D to 3D and back keeps the elastic drawing and its Undo entry',async()=>{
+    const b=browser();b.api.showBuilder(Chem.resolveName('Ethanol'));const before=b.api.getDraft();
+    b.$('builder-elastic').emit('click');b.moveAtom(0);const edited=b.api.getDraft();
+    const [model]=await b.api.openViewer();b.app.state.selected=model;b.$('edit-in-builder').emit('click');
+    assert.deepEqual(b.api.getDraft(),edited);b.$('builder-undo').emit('click');assert.deepEqual(b.api.getDraft(),before);
+  });
+  await test('eligible mapped sketches without coordinates request exactly one 3D state',async()=>{
+    const b=browser();b.api.showBuilder(record());await b.tick();await b.finish(b.requests[0]);
+    const opening=b.api.openViewer();await b.settle();const parse=b.requests.at(-1),reply=resultFor(parse.payload.draft);
+    const model=reply.molecules[0];model.conformers=[];model.stereo.centers=[];parse.resolve(reply);await b.settle();
+    const generate=b.requests.at(-1);assert.equal(generate.operation,'conformers');assert.equal(generate.payload.numConfs,1);
+    generate.resolve({molecule:{...model,conformers:record().conformers}});await opening;
+    assert.equal(b.loads.length,1);assert(Records.geometry(b.loads[0][0]));
+  });
   await test('periodic elements and signed charges use shape validation, not the legacy valence gate',()=>{
     let d=M.empty('rdkit');for(const e of ['S','P','B','Si','Na','Cl','H','Og'])d=M.addAtom(d,e,0,0);
     d=M.setCharge(d,4,1);d=M.setCharge(d,5,-1);assert.equal(d.atoms[5].charge,-1);

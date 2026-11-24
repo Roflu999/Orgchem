@@ -8,6 +8,12 @@
   const diagnosticKeys=new Map(Object.entries(window.AtlasLocales?.en||{}).filter(([key])=>/^(stereo|builder|projection|import|grid)\./.test(key)).map(([key,value])=>[value,key]));
   const detail=text=>{if(!text)return '';const key=diagnosticKeys.get(text);const valence=/^Neutral valence \/ carbocation valence exceeded at atom (\d+) \(([A-Z][a-z]?)\): maximum (\d+)\. Remove or lower a bond first\.$/.exec(text);if(valence)return tr('builder.error.valence','Neutral valence / carbocation valence exceeded at atom {number} ({element}): maximum {maximum}. Remove or lower a bond first.',{number:valence[1],element:valence[2],maximum:valence[3]});return key?tr(key,text):tr('common.original','{detail}',{detail:text});};
   const M = window.MoleculeSketcher, app = window.BondAtlas, $ = id => document.getElementById(id);
+  // On phones, leave the example visible before asking students to choose a tool.
+  const compactTools=window.matchMedia?.('(max-width:760px)');
+  if(compactTools){
+    const drawer=$('drawing-tools');drawer.open=!compactTools.matches;
+    compactTools.addEventListener('change',event=>{drawer.open=!event.matches;});
+  }
   const svg = $('builder-canvas'), NS = 'http://www.w3.org/2000/svg';
   svg.setAttribute('direction','ltr');
   const elements = { C:'Carbon', H:'Hydrogen', N:'Nitrogen', O:'Oxygen', F:'Fluorine', Cl:'Chlorine', Br:'Bromine', I:'Iodine' };
@@ -46,7 +52,9 @@
     const warnings = [...new Set([...(response.warnings || []), ...(structure.warnings || [])])];
     return { valid:true, structure, hydrogens:snapshot.atoms.map(a => structure.hydrogens[map.get(a.id)] || 0), message:warnings.join(' ') || 'Validated by RDKit. Canvas positions never assign stereochemistry.', warnings, busy:false };
   }
-  function identify() {
+  let recovery;
+  function identify(automaticExample = false) {
+    recovery?.changed(draft, automaticExample);
     cancelAnalysis();
     if (isAdvanced()) {
       if (!draft.atoms.length) return advancedScene(pendingResult('Add an atom. This draft uses the RDKit server.'));
@@ -71,6 +79,8 @@
   }
   function draftForElement(e) { return !Object.prototype.hasOwnProperty.call(M.VAL, e) && !isAdvanced() ? M.toAdvanced(draft) : draft; }
   let tool = 'move', element = 'C', order = 1, selection = null, anchor = null, gesture = null, paletteDrag = null;
+  const moving = () => tool === 'move' || tool === 'elastic';
+  let preview = null;
   let history = [], future = [], sample = false, width = 700, height = 445;
   let camera = { x:500, y:260, scale:1 }, pendingLine = null;
   const pretty = f => window.MoleculeRecords?.prettyFormula?window.MoleculeRecords.prettyFormula(f):f.replace(/\d/g, d => '₀₁₂₃₄₅₆₇₈₉'[Number(d)]);
@@ -135,7 +145,9 @@
     $('builder-open-all').hidden=advanced||scene.components.length<2; $('builder-open-all').disabled=!scene.valid||scene.components.length>12;
     $('builder-ideal').disabled=advanced||!scene.components.some(c=>c.valid);
     const s=analysis.structure, valid=analysis.valid;
-    $('builder-to-fischer').disabled=!valid; $('builder-to-newman').disabled=!valid;
+    $('sketch-identity').hidden=!valid;
+    ui($('sketch-identity'),()=>valid?[s.knownName||advanced?s.name:'',pretty(s.formula)+chargeLabel(s.charge)].filter(Boolean).join(' · '):'');
+    $('builder-to-skeletal').disabled=!valid; $('builder-to-fischer').disabled=!valid; $('builder-to-newman').disabled=!valid;
     ui($('builder-name'),()=>valid?(advanced?s.name:s.knownName?s.name:tr("builder.nameMissing",'Name not in offline library')):(analysis.busy?tr("builder.checking",'Checking current draft…'):draft.atoms.length?tr("builder.finish",'Finish your molecule'):tr("builder.start",'Start a molecule')));
     ui($('builder-formula'),()=>valid?pretty(s.formula)+chargeLabel(s.charge):'—');
     ui($('builder-recognition'),()=>valid?(advanced?detail(analysis.message):s.charge?tr("builder.cation",'Classical C⁺ visualization: valence 3 at positive carbon. Neutral isomer enumeration and neutral-only exports are disabled.'):s.knownName?tr("builder.matched",'Matched by connectivity in the offline naming library.'):tr("builder.validUnnamed",'Connectivity is valid. Formula and properties are available, but a systematic name is not mapped.')) : detail(analysis.message));
@@ -152,6 +164,8 @@
   function updateSelection() {
     const isAtom=selection?.kind==='atom' && !!draft.atoms[selection.i];
     const bond=selection?.kind==='bond'?draft.bonds.find(b=>b.a===selection.a&&b.b===selection.b):null;
+    $('builder-angle-note').hidden=!isAtom;
+    $('builder-angle-mode').disabled=tool!=='move';
     $('builder-atom-controls').hidden=!isAtom; $('builder-bond-controls').hidden=!bond; $('builder-delete').hidden=!isAtom&&!bond;
     if (isAtom) {
       const a=draft.atoms[selection.i],h=analysis.hydrogens?.[selection.i]||0;
@@ -161,7 +175,7 @@
       if(!Array.from(charge.options).some(o=>o.value===String(a.charge||0))){const option=document.createElement('option');option.value=String(a.charge);ui(option,()=>tr('builder.formalCharge','{charge} formal charge',{charge:a.charge}));charge.append(option);}
       charge.value=String(a.charge||0); charge.disabled=false;
       const orders=draft.bonds.filter(b=>b.a===selection.i||b.b===selection.i).map(b=>b.order);
-      ui($('builder-angle-note'),()=>isAdvanced()?tr("builder.rdkitAngles",'RDKit validates bonding and charge. 2D positions are illustrative and never assign or invert stereochemistry.'):a.charge?tr("builder.cationAngles",'C⁺: approximately trigonal planar, 120°. Empty p orbital; no lone pair.'):orders.includes(3)||orders.filter(o=>o===2).length>1?tr("builder.spAngles",'sp center: approximately linear, 180°.'):orders.includes(2)?tr("builder.sp2Angles",'sp² center: approximately trigonal planar, 120°.'):a.e==='C'?tr("builder.sp3Angles",'sp³ carbon: approximately tetrahedral, 109.5° in 3D. A flat zigzag is a projection, not the actual angle.'):tr("builder.otherAngles",'Geometry depends on bonding and lone pairs; positions here are illustrative.'));
+      ui($('builder-angle-note'),()=>isAdvanced()?tr("builder.rdkitAngles",'RDKit validates bonding and charge. 2D positions are illustrative and never assign or invert stereochemistry.'):a.e!=='C'?tr("builder.otherAngles",'Geometry depends on bonding and lone pairs; positions here are illustrative.'):a.charge?tr("builder.cationAngles",'C⁺: approximately trigonal planar, 120°. Empty p orbital; no lone pair.'):orders.includes(3)||orders.filter(o=>o===2).length>1?tr("builder.spAngles",'sp center: approximately linear, 180°.'):orders.includes(2)?tr("builder.sp2Angles",'sp² center: approximately trigonal planar, 120°.'):tr("builder.sp3Angles",'sp³ carbon: approximately tetrahedral, 109.5° in 3D. A flat zigzag is a projection, not the actual angle.'));
       ui($('builder-grow'),()=>tr('builder.attach','Attach {element}',{element}));
     } else if (bond) {
       ui($('builder-selection-label'),()=>tr('builder.bondSelection','Bond · atom {a} to atom {b}',{a:bond.a+1,b:bond.b+1}));
@@ -173,7 +187,8 @@
     document.querySelectorAll('[data-sketch-order]').forEach(b=>b.setAttribute('aria-pressed',String(tool==='bond'&&Number(b.dataset.sketchOrder)===order)));
     $('builder-ring').setAttribute('aria-pressed',String(tool==='ring'));
     $('builder-move').setAttribute('aria-pressed',String(tool==='move')); $('builder-erase').setAttribute('aria-pressed',String(tool==='erase'));
-    const hints=()=>({ring:tr("builder.hintRing",'Benzene ring · tap empty space to place a regular 120° hexagon'),move:tr("builder.hintMove",'Move · drag an atom, or drag a bond to move both ends'),element:tr('builder.hintElement','{element} · tap empty space to add; tap an atom to replace',{element}),bond:tr('builder.hintBond','{order} bond · drag between atoms, or tap two atoms',{order:bondOrder(order)}),erase:tr("builder.hintErase",'Erase · tap an atom or bond to remove it')});
+    $('builder-elastic').setAttribute('aria-pressed',String(tool==='elastic'));
+    const hints=()=>({elastic:tr('sim.hint','Drag an atom or use arrow keys. Bonded atoms follow like springs. This changes the drawing, not molecular energy.'),ring:tr("builder.hintRing",'Benzene ring · tap empty space to place a regular 120° hexagon'),move:tr("builder.hintMove",'Move · drag an atom, or drag a bond to move both ends'),element:tr('builder.hintElement','{element} · tap empty space to add; tap an atom to replace',{element}),bond:tr('builder.hintBond','{order} bond · drag between atoms, or tap two atoms',{order:bondOrder(order)}),erase:tr("builder.hintErase",'Erase · tap an atom or bond to remove it')});
     ui($('builder-tool-hint'),()=>hints()[tool]); svg.dataset.tool=tool;
     $('builder-undo').disabled=!history.length; $('builder-redo').disabled=!future.length;
     $('builder-clear').disabled=!draft.atoms.length;
@@ -195,6 +210,7 @@
     if (pendingLine && anchor!==null && draft.atoms[anchor]) {
       const p=project(draft.atoms[anchor]); svg.append(node('line',{x1:p.x,y1:p.y,x2:pendingLine.x,y2:pendingLine.y,class:'sketch-pending'}));
     }
+    const highlighted=inspectedIndices();
     draft.atoms.forEach((a,i)=>{
       const p=project(a),h=analysis.hydrogens?.[i]||0;
       const g=node('g',{class:'sketch-atom',role:'button',tabindex:'0','data-atom':i,'data-sketch-focus':'a'+i,'aria-pressed':selection?.kind==='atom'&&selection.i===i||anchor===i,'aria-label':()=>atomDescription(a,i,h)});
@@ -211,6 +227,11 @@
         if(count&&!a.charge)chosen.slice(0,count).forEach(t=>[-3,3].forEach(o=>g.append(node('circle',{cx:p.x+33*Math.cos(t)-o*Math.sin(t),cy:p.y+33*Math.sin(t)+o*Math.cos(t),r:1.9,class:'sketch-lone-dot'}))));
       }
       if(h)g.append(node('text',{x:p.x,y:p.y+15,class:'sketch-hydrogen'},()=>('H'+(h>1?'₀₁₂₃₄₅₆₇₈₉'[h]:''))));
+      const slot=highlighted.indexOf(i);
+      if(slot>=0){
+        g.append(node('circle',{cx:p.x,cy:p.y,r:27,class:'sketch-inspection-ring'}));
+        g.append(node('text',{x:p.x+21,y:p.y-18,class:'inspection-number'},String(slot+1)));
+      }
       svg.append(g);
     });
     if (!draft.atoms.length) {
@@ -219,12 +240,46 @@
     }
     if(focused)svg.querySelector('[data-sketch-focus="'+focused+'"]')?.focus({preventScroll:true});
   }
-  function render() { updateToolbar(); updateIdentity(); updateSelection(); renderDrawing(); }
+  function currentLink(){
+    if(!preview||preview.draft!==draft)return null;
+    const link=preview.links.get(app.state.selected);
+    return link?.component===activeComponent ? link : null;
+  }
+  function inspectedIndices(){
+    const picked=app.inspection?.getSelection(), link=currentLink();
+    if(!link||!picked||picked.molecule!==app.state.selected)return [];
+    return picked.atomIndices.map(i=>Number.isInteger(i)?link.indices[i]:null);
+  }
+  function inspectSketchAtom(i){
+    if(!app.state.split||!moving())return;
+    const graphIndex=currentLink()?.indices.indexOf(i)??-1;
+    if(graphIndex>=0)app.inspection?.toggleAtom(graphIndex,app.state.selected);
+  }
+  function updateSplit(){
+    $('builder-split').disabled=!app.state.split&&$('builder-open-viewer').disabled;
+    if(!app.state.split)return;
+    const stale=!currentLink();
+    $('workspace').inert=stale;
+    $('split-refresh').hidden=!stale; $('split-refresh').disabled=$('builder-open-viewer').disabled;
+    $('split-stale').hidden=!stale;
+  }
+  function render() { updateToolbar(); updateIdentity(); updateSplit(); updateSelection(); renderDrawing(); }
+  document.addEventListener?.('bondatlas:inspection',()=>{
+    if(!initialized||$('builder-panel').hidden)return;
+    const last=inspectedIndices().filter(Number.isInteger).at(-1);
+    if(Number.isInteger(last)&&moving())selection={kind:'atom',i:last};
+    updateSelection();renderDrawing();
+  });
   function loadStructure(iso, isSample = false) {
     let next=M.fromStructure(iso,iso.schema==='bond-atlas/3'?iso.layouts?.skeletal:app.geometry2D(iso));
     if(next.atoms.some(a=>a.charge)&&next.engine!=='rdkit')next=M.toAdvanced(next);
+    installDraft(next, isSample);
+  }
+  function installDraft(next, isSample = false) {
+    const initialExample = !initialized && isSample;
     if(initialized)remember(draft); draft=next; initialized=true; selection=null; anchor=null; sample=isSample;
-    analysis=identify(); message(); fitDrawing(); render();
+    gesture=null; pendingLine=null;
+    analysis=identify(initialExample); message(); fitDrawing(); render();
   }
   function showBuilder(iso) {
     app.stopRotation();
@@ -257,6 +312,7 @@
     if(tool==='erase'){apply(M.removeAtom(draft,i),null);return;}
     if(tool==='element'){apply(M.setElement(draftForElement(element),i,element),{kind:'atom',i});return;}
     selection={kind:'atom',i};
+    inspectSketchAtom(i);
     if(tool==='bond') {
       if(anchor!==null&&anchor!==i){apply(M.setBond(draft,anchor,i,order),null);return;}
       anchor=anchor===i?null:i;
@@ -279,6 +335,26 @@
     ring.atoms.forEach(a=>{next=M.addAtom(next,a.e,a.x,a.y);});
     ring.bonds.forEach(b=>{next=M.setBond(next,start+b.a,start+b.b,b.order);});
     apply(next,{kind:'atom',i:start});fitDrawing();renderDrawing();
+  }
+  // A local 2D constraint, not a geometry optimization. Do not distort rings,
+  // junctions or other fragments to fit an acyclic chain-drawing convention.
+  function moveWithAngleMode(source, i, x, y) {
+    if ($('builder-angle-mode').value !== 'ideal') return M.moveAtom(source,i,x,y);
+    const incident = j => source.bonds.filter(b=>b.a===j||b.b===j);
+    const other = (b,j) => b.a===j?b.b:b.a;
+    const end = incident(i);
+    if (end.length !== 1) return M.moveAtom(source,i,x,y);
+    const pivot = other(end[0],i), arms = incident(pivot), p = source.atoms[pivot];
+    if (p.e !== 'C' || arms.length !== 2) return M.moveAtom(source,i,x,y);
+    const q = source.atoms[other(arms.find(b=>b!==end[0]),pivot)];
+    if (Math.hypot(q.x-p.x,q.y-p.y)<1e-6) return M.moveAtom(source,i,x,y);
+    const base = Math.atan2(q.y-p.y,q.x-p.x), side = Math.sign((q.x-p.x)*(y-p.y)-(q.y-p.y)*(x-p.x)) || 1;
+    const linear = arms.some(b=>b.order===3) || arms.every(b=>b.order===2);
+    const angle = base + (linear ? Math.PI : side*2*Math.PI/3);
+    const dx = Math.cos(angle), dy = Math.sin(angle), center = project(p);
+    const limit = (v,pos,min,max) => Math.abs(v)<1e-8?Infinity:(v>0?max-pos:min-pos)/(v*camera.scale);
+    const r = Math.max(0,Math.min(Math.hypot(x-p.x,y-p.y),limit(dx,center.x,28,width-28),limit(dy,center.y,32,height-32)));
+    return M.moveAtom(source,i,p.x+r*dx,p.y+r*dy);
   }
   function tidyAngles() {
     if(!draft.atoms.length)return;
@@ -316,7 +392,7 @@
     button.addEventListener('pointermove',e=>{
       const d=paletteDrag; if(!d||d.button!==button||d.id!==e.pointerId)return;
       if(!d.ghost&&Math.hypot(e.clientX-d.startX,e.clientY-d.startY)>7){
-        d.ghost=document.createElement('div');d.ghost.className='builder-drag-ghost';d.ui(ghost,()=>kind==='ring'?'⌬ Benzene':kind==='element'?value:(value===1?'—':value===2?'=':'≡'));document.body.append(d.ghost);
+        d.ghost=document.createElement('div');d.ghost.className='builder-drag-ghost';ui(d.ghost,()=>kind==='ring'?'⌬ '+tr('shell.benzene','Benzene'):kind==='element'?value:(value===1?'—':value===2?'=':'≡'));document.body.append(d.ghost);
       }
       if(d.ghost){d.ghost.style.left=(e.clientX+13)+'px';d.ghost.style.top=(e.clientY+13)+'px';}
     });
@@ -362,7 +438,7 @@
     const atom=e.target.closest('[data-atom]'), bond=e.target.closest('[data-bond-a]'),p=pointer(e);
     const i=atom?Number(atom.dataset.atom):-1;
     gesture={id:e.pointerId,start:p,last:p,atom:i,bond:bond?{a:Number(bond.dataset.bondA),b:Number(bond.dataset.bondB)}:null,before:draft,moved:false,oldAnchor:anchor};
-    if(tool==='move'){
+    if(moving()){
       selection=i>=0?{kind:'atom',i}:gesture.bond?{kind:'bond',...gesture.bond}:null;anchor=null;render();
     } else if(tool==='bond'&&i>=0){anchor=i;selection={kind:'atom',i};render();}
     svg.setPointerCapture(e.pointerId);
@@ -371,22 +447,26 @@
     const g=gesture;if(!g||g.id!==e.pointerId)return;
     const p=pointer(e);g.last=p;if(Math.hypot(p.x-g.start.x,p.y-g.start.y)>5)g.moved=true;
     if(!g.moved)return;
-    if(tool==='move'&&(g.atom>=0||g.bond)){
+    if(moving()&&(g.atom>=0||g.bond)){
       const indices=g.atom>=0?[g.atom]:[g.bond.a,g.bond.b];
       let dx=(p.x-g.start.x)/camera.scale,dy=(p.y-g.start.y)/camera.scale;
       // Keep both bond endpoints on the canvas when moving them together.
       const coords=indices.map(i=>project(g.before.atoms[i]));
       dx=Math.max((28-Math.min(...coords.map(a=>a.x)))/camera.scale,Math.min(dx,(width-28-Math.max(...coords.map(a=>a.x)))/camera.scale));
       dy=Math.max((32-Math.min(...coords.map(a=>a.y)))/camera.scale,Math.min(dy,(height-32-Math.max(...coords.map(a=>a.y)))/camera.scale));
-      let next=g.before;indices.forEach(i=>{const a=g.before.atoms[i];next=M.moveAtom(next,i,a.x+dx,a.y+dy);});draft=next;renderDrawing();
+      if(tool==='elastic')draft=M.elasticDrag(g.before,indices,dx,dy);
+      else if(g.atom>=0){const a=g.before.atoms[g.atom];draft=moveWithAngleMode(g.before,g.atom,a.x+dx,a.y+dy);}
+      else { draft=g.before; for(const i of indices){const a=g.before.atoms[i];draft=M.moveAtom(draft,i,a.x+dx,a.y+dy);} }
+      renderDrawing();
     } else if(tool==='bond'&&g.atom>=0){pendingLine=p;renderDrawing();}
   });
   function endGesture(e,cancelled){
     const g=gesture;if(!g||g.id!==e.pointerId)return;gesture=null;pendingLine=null;
     if(cancelled){draft=g.before;anchor=g.oldAnchor;render();return;}
     attempt(()=>{
-      if(tool==='move'){
+      if(moving()){
         if(g.moved&&(g.atom>=0||g.bond)){remember(g.before);analysis=identify();render();}
+        else if(!g.moved&&g.atom>=0)inspectSketchAtom(g.atom);
         return;
       }
       if(tool==='bond'&&g.atom>=0){
@@ -413,23 +493,47 @@
       else if(tool==='ring')stampRing({x:width/2,y:height/2});
       else if(tool==='element'){const p={x:width/2,y:height/2};if(nearestAtom(p)>=0){p.x+=70;p.y+=60;}addAt(p);}
     });return;}
-    if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)&&tool==='move'){
+    if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)&&moving()){
       const i=atom?Number(atom.dataset.atom):selection?.kind==='atom'?selection.i:-1;if(i<0)return;e.preventDefault();
-      attempt(()=>{const a=project(draft.atoms[i]),step=e.shiftKey?25:8;a.x+=e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0;a.y+=e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0;const p=worldPoint(a);apply(M.moveAtom(draft,i,p.x,p.y),{kind:'atom',i});});
+      attempt(()=>{const a=project(draft.atoms[i]),step=e.shiftKey?25:8;a.x+=e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0;a.y+=e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0;const p=worldPoint(a);apply(tool==='elastic'?M.elasticDrag(draft,[i],p.x-draft.atoms[i].x,p.y-draft.atoms[i].y):moveWithAngleMode(draft,i,p.x,p.y),{kind:'atom',i});});
     }
   });
   $('builder-panel').addEventListener('keydown',e=>{
-    if(e.target.matches('input,select,textarea'))return;
+    if(e.target.closest('#builder-split-pane')||e.target.matches('input,select,textarea'))return;
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo(e.shiftKey);}
     else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();undo(true);}
     else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();const a=e.target.closest('[data-atom]'),b=e.target.closest('[data-bond-a]');if(a)selection={kind:'atom',i:Number(a.dataset.atom)};else if(b)selection={kind:'bond',a:Number(b.dataset.bondA),b:Number(b.dataset.bondB)};attempt(deleteSelection);}
     else if(e.key==='Escape'){anchor=null;pendingLine=null;setTool('move');}
   });
   $('show-builder').addEventListener('click',()=>attempt(()=>showBuilder()));
-  $('show-explorer').addEventListener('click',showExplorer);
-  $('edit-in-builder').addEventListener('click',()=>attempt(()=>{if(app.state.selected)showBuilder(app.state.selected);}));
+  function leaveSimulator(){
+    if(analysis.busy){analysis=identify();message();render();} // Supersede an in-flight conversion with normal draft validation.
+  }
+  $('show-explorer').addEventListener('click',()=>{leaveSimulator();showExplorer();});
+  $('show-stereo').addEventListener('click',leaveSimulator);
+  $('edit-in-builder').addEventListener('click',()=>attempt(()=>{
+    const selected=app.state.selected;
+    if(!selected)return;
+    if(preview?.records.includes(selected)&&preview.draft===draft){
+      if(isAdvanced()&&draft.sourceRecord!==selected){
+        draft={...draft,sourceRecord:selected};preview.draft=draft;analysis=identify();
+      }else if(preview.records.length>1){
+        activeComponent=scene.components.findIndex(c=>c.structure===selected);selection=null;
+      }
+      showBuilder();
+    }else{
+      showBuilder(selected);
+      // fromStructure copies atoms in source order. Other legacy previews instead
+      // pass through canonicalization, for which openViewer records an explicit map.
+      preview={records:[selected],draft,links:new Map([[selected,{component:0,indices:draft.atoms.map((_,i)=>i)}]])};
+    }
+    const last=inspectedIndices().filter(Number.isInteger).at(-1);
+    if(Number.isInteger(last)){selection={kind:'atom',i:last};render();}
+    svg.focus();
+  }));
   $('builder-load-selected').addEventListener('click',()=>attempt(()=>{if(!app.state.selected)throw Error('Select a structure in the viewer first.');loadStructure(app.state.selected);}));
   $('builder-example').addEventListener('change',()=>{const name=$('builder-example').value;if(name)attempt(()=>loadStructure(Chem.resolveName(name),true));$('builder-example').value='';});
+  $('builder-elastic').addEventListener('click',()=>setTool('elastic'));
   $('builder-move').addEventListener('click',()=>setTool('move'));$('builder-erase').addEventListener('click',()=>setTool('erase'));
   $('builder-fit').addEventListener('click',()=>{fitDrawing();renderDrawing();});
   $('builder-undo').addEventListener('click',()=>undo());$('builder-redo').addEventListener('click',()=>undo(true));
@@ -442,7 +546,13 @@
   $('builder-change-order').addEventListener('change',()=>{
     attempt(()=>{if(selection?.kind==='bond')apply(M.setBond(draft,selection.a,selection.b,Number($('builder-change-order').value)));});updateSelection();
   });
-  async function openViewer(mode='3d',all=false){
+  async function openViewer(mode='3d',all=false,split=false){
+    // Undock the current preview without clearing a ruler or rebuilding the camera.
+    if(app.state.split&&!split&&!all&&currentLink()&&preview.records.length===1){
+      showExplorer();if(mode!==app.state.mode)app.setMode(mode);
+      app.setElectrons($('builder-clouds').checked,$('builder-lone-pairs').checked);
+      $('tab-'+app.state.mode)?.focus();return preview.records;
+    }
     let records;
     if(isAdvanced()){
       const snapshot=M.checked(draft), exact=JSON.stringify(snapshot), signature=M.chemicalSignature(snapshot);
@@ -453,7 +563,29 @@
         const result=await parseDraft(snapshot,controller.signal);
         if(requestRevision!==revision||controller.signal.aborted)return;
         if(JSON.stringify(draft)!==exact){analysis=identify();render();return;}
-        cacheResult(signature,result);analysis=advancedScene(result);render();records=[result.structure];
+        cacheResult(signature,result);
+        let model=result.structure;
+        if(mode==='3d'&&!window.MoleculeRecords.geometry(model)){
+          const stereo=model.stereo||{};
+          if(stereo.unsupported?.length||[...(stereo.centers||[]),...(stereo.bonds||[])].some(s=>!s.specified)){
+            // Keep ambiguous chemistry in 2D; the stereo workspace offers explicit choices.
+            mode='skeletal';
+          }else{
+            message(()=>tr('sim.generating','Preparing a 3D conformer…'));
+            try {
+              const response=await window.ChemistryClient.job('conformers',{molecule:model,numConfs:1,seed:42},{signal:controller.signal});
+              if(requestRevision!==revision||controller.signal.aborted)return;
+              if(JSON.stringify(draft)!==exact){analysis=identify();render();return;}
+              if(!window.MoleculeRecords.geometry(response.molecule))throw Error(response.warnings?.join(' ')||'No 3D coordinates were generated.');
+              model=response.molecule;
+            }catch(error){
+              if(requestRevision!==revision||controller.signal.aborted)return;
+              // Generation can fail for a valid graph. Keep editing and retry available.
+              analysis=advancedScene(result);render();message(()=>detail(error.message));return;
+            }
+          }
+        }
+        analysis=advancedScene(result);message();render();records=[model];
       }catch(error){
         if(requestRevision!==revision||controller.signal.aborted)return;
         analysis=advancedScene(pendingResult(error.message));render();throw error;
@@ -463,14 +595,32 @@
       if(all&&!scene.valid)throw Error('Complete or delete the unfinished fragments first.');
       records=all?scene.components.map(c=>c.structure):[analysis.structure];
     }
+    const links=new Map(records.map((model,k)=>{
+      const component=all?k:activeComponent;
+      const indices=isAdvanced()?model.atomIds.map(id=>draft.atoms.findIndex(a=>a.id===id)):scene.components[component].graphToDraft;
+      return [model,{component,indices}];
+    }));
+    const selectedDraftIndex=selection?.kind==='atom'?selection.i:-1;
     app.loadStructures(records,'Molecule builder');
+    preview={records,draft,links};
     if(records[0]?.schema==='bond-atlas/3')window.StereoExplorer?.setMolecules?.(records,{sync:false});
-    showExplorer();app.setMode(mode);app.setElectrons($('builder-clouds').checked,$('builder-lone-pairs').checked);
+    if(split)app.setSplit(true);else showExplorer();
+    app.setMode(mode);app.setElectrons($('builder-clouds').checked,$('builder-lone-pairs').checked);
     if(all)app.setTogether(true);
+    const index=currentLink()?.indices.indexOf(selectedDraftIndex)??-1;
+    if(index>=0)app.inspection?.toggleAtom(index,app.state.selected);
+    if(split){render();$('builder-split').focus();}
+    else $('tab-'+app.state.mode)?.focus();
     return records;
   }
+  $('builder-split').addEventListener('click',()=>attempt(()=>{
+    if(app.state.split){leaveSimulator();app.setSplit(false);render();return;}
+    return openViewer('3d',false,true);
+  }));
+  $('split-refresh').addEventListener('click',()=>attempt(()=>openViewer('3d',false,true)));
   $('builder-open-viewer').addEventListener('click',()=>attempt(()=>openViewer()));
   $('builder-open-all').addEventListener('click',()=>attempt(()=>openViewer('3d',true)));
+  $('builder-to-skeletal').addEventListener('click',()=>attempt(()=>openViewer('skeletal')));
   $('builder-to-fischer').addEventListener('click',()=>attempt(()=>openViewer('fischer')));
   $('builder-to-newman').addEventListener('click',()=>attempt(()=>openViewer('newman')));
   $('builder-component').addEventListener('change',()=>{activeComponent=Number($('builder-component').value);selection=null;render();});
@@ -478,5 +628,6 @@
   $('builder-lone-pairs').addEventListener('change',renderDrawing);
   $('builder-ideal').addEventListener('click',()=>attempt(tidyAngles));
   new ResizeObserver(()=>{if(!$('builder-panel').hidden&&initialized){fitDrawing();renderDrawing();}}).observe(svg);
+  recovery = window.AtlasDraftRecovery?.attach(() => draft, installDraft);
   window.MoleculeBuilder={showBuilder,showExplorer,loadStructure,openViewer,getDraft:()=>M.checked(draft)};
 })();

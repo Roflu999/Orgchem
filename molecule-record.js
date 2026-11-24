@@ -19,10 +19,15 @@
     // Canonical molecular identity is not an array-order identity.
     return g.id+':'+(isRecord(g)?(conformer(g)?.id||'no-3d')+':'+g.atomIds.join(','):JSON.stringify([g.atoms,g.bonds,g.hydrogens,g.charges]));
   }
-  function stereoLabel(g){
+  function bondStereoLabel(b, unspecified='unspecified', unavailable='assigned (descriptor unavailable)'){
+    if(!b.descriptor)return b.specified?unavailable:unspecified;
+    return b.descriptor+(b.cisTrans?' ('+b.cisTrans+')':'');
+  }
+  function stereoLabel(g, unspecified='unspecified', unavailable='assigned (descriptor unavailable)'){
     if(!isRecord(g))return 'Unassigned stereochemistry';
-    const centers=(g.stereo?.centers||[]).filter(c=>c.cip).map(c=>String(Number.isInteger(c.atom)?g.atoms[c.atom]+(c.atom+1):c.atomId)+': '+c.cip);
-    const bonds=(g.stereo?.bonds||[]).filter(b=>b.descriptor).map(b=>(b.bondId||'double bond')+': '+b.descriptor);
+    const label=i=>g.atoms[i]+(i+1);
+    const centers=(g.stereo?.centers||[]).map(c=>(Number.isInteger(c.atom)?label(c.atom):c.atomId)+': '+(c.cip||(c.specified?unavailable:unspecified)));
+    const bonds=(g.stereo?.bonds||[]).map(b=>label(b.a)+'–'+label(b.b)+': '+bondStereoLabel(b,unspecified,unavailable));
     return [...centers,...bonds].join(' · ')||'No assigned stereogenic features';
   }
   function themedSVG(svg,ink){
@@ -31,6 +36,6 @@
   }
   function imageURL(svg){return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);}
   function prettyFormula(formula){return String(formula).replace(/\[(\d+)([A-Z][a-z]?)\]/g,(_,mass,symbol)=>mass.replace(/\d/g,d=>'⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(d)])+symbol).replace(/\d/g,d=>'₀₁₂₃₄₅₆₇₈₉'[Number(d)]);}
-  const api={isRecord,validate,conformer,geometry,withConformer,cacheKey,stereoLabel,themedSVG,imageURL,prettyFormula};
+  const api={isRecord,validate,conformer,geometry,withConformer,cacheKey,stereoLabel,bondStereoLabel,themedSVG,imageURL,prettyFormula};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;root.MoleculeRecords=api;
 })(typeof self!=='undefined'?self:globalThis);

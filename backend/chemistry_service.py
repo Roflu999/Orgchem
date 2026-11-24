@@ -211,9 +211,15 @@ def _stereo(mol):
             kind = str(info.type)
             if kind == "Bond_Double":
                 bond = mol.GetBondWithIdx(info.centeredOn)
-                code = str(bond.GetStereo())
-                desc = "E" if code in ("STEREOE", "STEREOTRANS") else "Z" if code in ("STEREOZ", "STEREOCIS") else None
-                double.append({"bondId": _bond_id(bond), "a": bond.GetBeginAtomIdx(), "b": bond.GetEndAtomIdx(), "descriptor": desc, "specified": desc is not None})
+                specified = str(info.specified) == "Specified"
+                desc = bond.GetProp("_CIPCode") if specified and bond.HasProp("_CIPCode") else None
+                # CIS/TRANS tags use RDKit's reference atoms, not necessarily CIP priorities.
+                # Give the familiar alias only for R–CH=CH–R′ (one H at each end).
+                simple = all(a.GetAtomicNum() == 6 and a.GetTotalNumHs(includeNeighbors=True) == 1
+                             for a in (bond.GetBeginAtom(), bond.GetEndAtom()))
+                double.append({"bondId": _bond_id(bond), "a": bond.GetBeginAtomIdx(), "b": bond.GetEndAtomIdx(),
+                               "descriptor": desc, "specified": specified,
+                               "cisTrans": {"Z": "cis", "E": "trans"}.get(desc) if simple else None})
             elif kind != "Atom_Tetrahedral":
                 unsupported.append(f"{kind} at index {info.centeredOn}")
     for atom in mol.GetAtoms():
@@ -557,14 +563,25 @@ def _depiction(mol, displayed):
     if not supplied_2d:
         drawing.RemoveAllConformers()
         rdDepictor.Compute2DCoords(drawing, canonOrient=True)
-    # Maps are internal identities, not labels. Preserve identities as atom props.
-    for atom in drawing.GetAtoms():
+    # Keep supplied coordinates and mapped H for the editable layout, not the
+    # illustration: moving a sketch atom must never flip a depicted alkene.
+    picture = Chem.Mol(drawing)
+    picture.RemoveAllConformers()
+    for atom in picture.GetAtoms():
         atom.SetAtomMapNum(0)
+    if not displayed:
+        picture = Chem.RemoveHs(picture)  # retains isotopic and stereo-essential H
+    _assign(picture)
+    rdDepictor.Compute2DCoords(picture, canonOrient=True)
+    Chem.AddStereoAnnotations(picture)
     drawer = rdMolDraw2D.MolDraw2DSVG(520, 360)
-    drawer.drawOptions().addStereoAnnotation = True
+    drawer.drawOptions().unspecifiedStereoIsUnknown = True
+    drawer.drawOptions().setAnnotationColour((0, 0, 0))
+    # Use the same themeable ink for E/Z labels as for the bonds.
+    drawer.drawOptions().setBondNoteColour((0, 0, 0))
     drawer.drawOptions().useBWAtomPalette()
     drawer.drawOptions().clearBackground = False
-    rdMolDraw2D.PrepareAndDrawMolecule(drawer, drawing)
+    rdMolDraw2D.PrepareAndDrawMolecule(drawer, picture)
     drawer.FinishDrawing()
     svg = drawer.GetDrawingText()
     conf = drawing.GetConformer()
@@ -653,6 +670,12 @@ def _record(mol, conformers=None, warnings=None):
     notes = list(warnings or [])
     if mol.HasProp("_AtlasWarnings"):
         notes.extend(json.loads(mol.GetProp("_AtlasWarnings")))
+    # 2D MOL encodes alkene stereo through geometry. Store a stereo-faithful
+    # block even when the independently retained sketch positions disagree.
+    exchange_mol = mol
+    if stereo["bonds"] and mol.GetNumConformers() and not mol.GetConformer().Is3D():
+        exchange_mol = Chem.Mol(mol)
+        rdDepictor.Compute2DCoords(exchange_mol, canonOrient=True)
     if stereo["unsupported"]:
         notes.append("Some stereo features are retained but not supported for enumeration/projection")
     if components > 1:
@@ -669,7 +692,7 @@ def _record(mol, conformers=None, warnings=None):
         "metadata": {"counts": dict(counts), "mass": float(Descriptors.MolWt(mol)), "heavy": mol.GetNumHeavyAtoms(), "dbe": dbe},
         "structureInsights": insights,
         "tags": tags, "stability": {"score": 0, "label": "Not stability-ranked", "reasons": [], "method": "RDKit connectivity/stereochemistry; no thermodynamic stability model"},
-        "stereo": stereo, "molblock": _molblock(mol), "depictionId": _hash('depiction-', skeletal_svg + displayed_svg), "depictions": {"skeletal": skeletal_svg, "displayed": displayed_svg},
+        "stereo": stereo, "molblock": _molblock(exchange_mol), "depictionId": _hash('depiction-', skeletal_svg + displayed_svg), "depictions": {"skeletal": skeletal_svg, "displayed": displayed_svg},
         "layouts": {"skeletal": skeletal, "displayed": displayed}, "conformers": list(conformers or []), "warnings": list(dict.fromkeys(notes)),
     }
 

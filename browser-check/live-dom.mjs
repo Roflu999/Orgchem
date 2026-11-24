@@ -47,7 +47,7 @@ try {
   w.AbortController = AbortController;
   w.AbortSignal = AbortSignal;
   w.fetch = localFetch;
-  w.matchMedia ??= query => Object.assign(new w.EventTarget(), {media: query, matches: false});
+  w.matchMedia ??= query => Object.assign(new w.EventTarget(), {media: query, matches: query === '(min-width:1001px)'});
   w.ResizeObserver ??= class { observe() {} disconnect() {} };
   for (const [source, filename] of code) {
     // The renderer bundles its own worker. DOM checks don't start it or emulate WebGL.
@@ -85,9 +85,37 @@ try {
   assert.equal(doc.documentElement.dir, 'ltr');
   assert.equal(el('preferences-button').textContent, original);
   console.log('PASS: Arabic and English changed labels and document direction; DOM only, no pixels verified');
+  select('builder-example','ethanol');
+  const draft=w.MoleculeBuilder.getDraft(), oxygen=draft.atoms.findIndex(a=>a.e==='O');
+  const pick=(index,key='Enter')=>doc.querySelector(`#builder-canvas [data-atom="${index}"]`).dispatchEvent(new w.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}));
+  pick(oxygen);el('builder-split').click();
+  assert.equal(el('workspace').parentElement,el('builder-split-pane'));
+  const model=w.BondAtlas.state.selected, inspected=w.BondAtlas.inspection;
+  assert.deepEqual(Array.from(inspected.getSelection().atomIndices),[model.atoms.indexOf('O')]);
+  const carbon=model.atoms.indexOf('C');inspected.toggleAtom(carbon,model);
+  assert.equal(doc.querySelectorAll('.sketch-inspection-ring').length,2);
+  pick(oxygen,'ArrowRight');assert.equal(el('split-stale').hidden,false);assert(el('workspace').inert);
+  el('split-refresh').click();assert.equal(el('split-stale').hidden,true);assert(!el('workspace').inert);
+  el('builder-split').click();assert.equal(el('workspace').parentElement,el('explorer-panel'));
+  console.log('PASS: desktop split tracks canonical atom selections, blocks stale measurements and refreshes the same viewer');
   el('show-explorer').click();
   doc.querySelector('[data-formula="C2H6O"]').click();
   await until(() => !el('formula-reasoning').hidden && el('result-count').textContent === '2', 'two deduced structures');
+  for (const index of [0,1,3]) {
+    el('inspection-atom').selectedIndex = index;
+    el('inspection-pick').click();
+    if (index === 1) assert.match(el('inspection-value').textContent, /Distance: [\d.]+ Å/);
+  }
+  assert.match(el('inspection-value').textContent, /Angle: [\d.]+°/);
+  assert.match(el('inspection-source').textContent, /Illustrative coordinates/);
+  assert.deepEqual(Array.from(inspected.getSelection().atomIndices), [0,1,null]);
+  select('language-select','de');
+  assert.match(el('inspection-value').textContent, /Winkel: [\d,]+°/);
+  assert.deepEqual(Array.from(inspected.getSelection().atomIndices), [0,1,null]);
+  select('language-select','en');
+  el('inspection-clear').click();
+  assert.equal(el('inspection-value').textContent,'');
+  console.log('PASS: atom controls measure illustrative geometry and unmapped H; live localization preserves the selection');
   el('formula-reasoning').querySelector('summary').click();
   assert.equal(el('formula-reasoning').querySelector('details').open, true);
   assert.match(el('reason-skeletons').textContent, /arrangements: 2/);

@@ -49,7 +49,9 @@
         if(local.atoms.some(a=>a.charge)){
           try{result={valid:true,structure:chargedStructure(local),message:'Carbocation visualization; not neutral isomer enumeration.'};}catch(e){result={valid:false,structure:null,message:e.message};}
         }else result=M.analyze(local);
-        components.push({...result,indices});
+        // The neutral engine canonicalizes atom order; charged models retain heavy-atom order.
+        const graphToDraft=result.valid ? (result.graphToDraft ? result.graphToDraft.map(i=>indices[i]) : indices.filter(i=>d.atoms[i].e!=='H')) : [];
+        components.push({...result,indices,graphToDraft});
       });
       return {components,hydrogens,valid:components.length>0&&components.every(c=>c.valid),message:components.length?'Each disconnected component is a separate structure.':'Add an atom or load a textbook example.'};
     }catch(e){return {components:[],hydrogens,valid:false,message:e.message};}

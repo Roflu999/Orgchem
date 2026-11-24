@@ -14,6 +14,13 @@ test('offline structure notes depend on connectivity rather than name or formula
 test('separate scene components retain individual names and formulas',()=>{
  const r=S.analyze(joined(draft('CCO'),draft('C1=CC=CC=C1')));assert(r.valid);assert.equal(r.components.length,2);assert.deepEqual(r.components.map(c=>c.structure.formula).sort(),['C2H6O','C6H6']);assert.equal(r.hydrogens.reduce((s,h)=>s+h,0),12);
 });
+test('viewer atom mapping survives canonical ordering, folded H and component offsets',()=>{
+ const d={atoms:['C','O','H','C','C'].map((e,i)=>({e,x:i*50,y:0})),bonds:[{a:1,b:2,order:1},{a:1,b:3,order:1},{a:3,b:4,order:1}]};
+ const c=S.analyze(d).components[1], map=c.graphToDraft;
+ assert.deepEqual([...map].sort(),[1,3,4]);
+ c.structure.atoms.forEach((e,i)=>assert.equal(d.atoms[map[i]].e,e));
+ c.structure.bonds.forEach(({a,b,order})=>assert(d.bonds.some(e=>e.order===order&&[e.a,e.b].includes(map[a])&&[e.a,e.b].includes(map[b]))));
+});
 test('unfinished component stays visible and does not invalidate another identity silently',()=>{
  const d=M.addAtom(draft('CCO'),'H',300,300),r=S.analyze(d);assert.equal(r.valid,false);assert.equal(r.components.length,2);assert(r.components[0].valid);assert(!r.components[1].valid);
 });

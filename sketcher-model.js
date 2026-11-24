@@ -133,6 +133,35 @@
   function moveAtom(draft, i, x, y) {
     return edit(draft, d => { index(i, d.atoms.length); d.atoms[i].x = x; d.atoms[i].y = y; });
   }
+  // Pin the dragged atoms and relax bond-length springs in their connected component.
+  // Rest lengths are from the drawing, not measured molecular distances.
+  function elasticDrag(draft, pins, dx, dy) {
+    const d = checked(draft), fixed = new Set(pins);
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw Error('Drag offsets must be finite.');
+    const neighbors = d.atoms.map(() => []);
+    for (const {a,b} of d.bonds) { neighbors[a].push(b); neighbors[b].push(a); }
+    const component = new Set(fixed);
+    for (const i of component) {
+      index(i, d.atoms.length);
+      for (const j of neighbors[i]) component.add(j);
+    }
+    const springs = d.bonds.filter(b => component.has(b.a)).map(({a,b}) => {
+      const p = d.atoms[a], q = d.atoms[b];
+      return {a,b,length:Math.hypot(q.x-p.x,q.y-p.y)};
+    });
+    for (const i of fixed) { d.atoms[i].x += dx; d.atoms[i].y += dy; }
+    for (let step = 0; step < 10; step++) {
+      for (const {a,b,length} of springs) {
+        const p = d.atoms[a], q = d.atoms[b];
+        let x = q.x-p.x, y = q.y-p.y, distance = Math.hypot(x,y);
+        if (!distance) { x = draft.atoms[b].x-draft.atoms[a].x; y = draft.atoms[b].y-draft.atoms[a].y; }
+        const scale = .45 * (distance-length) / (distance || length || 1);
+        if (!fixed.has(a)) { p.x += x*scale; p.y += y*scale; }
+        if (!fixed.has(b)) { q.x -= x*scale; q.y -= y*scale; }
+      }
+    }
+    return d;
+  }
   function setElement(draft, i, e) {
     return edit(draft, d => { index(i, d.atoms.length); d.atoms[i].e = e; });
   }
@@ -221,8 +250,8 @@
       if (!Chem || typeof Chem.describe !== 'function') return invalid('Load chemistry.js before analyzing a molecule.');
       const raw = { atoms: d.atoms.map(a => a.e), m: d.atoms.map(() => d.atoms.map(() => 0)) };
       d.bonds.forEach(b => { raw.m[b.a][b.b] = raw.m[b.b][b.a] = b.order; });
-      let structure;
-      try { structure = Chem.describe(raw); }
+      let structure, graphToDraft;
+      try { structure = Chem.describe(raw, undefined, order=>{graphToDraft=order;}); }
       catch (error) {
         if (d.atoms.some((a, i) => a.e === 'H' && sums[i] !== 1)) return invalid('Attach each explicit hydrogen (H) to a heavy atom with one single bond, or delete it.');
         if (!raw.atoms.includes('C')) return invalid('Add a carbon atom and connect the atoms; only carbon-containing organic structures are supported.');
@@ -230,10 +259,10 @@
         return invalid(error.message);
       }
       if (!structure.knownName) structure = { ...structure, name: 'Unmapped structure', knownName: false };
-      return { valid: true, message: structure.knownName ? 'Valid structure. Unused heavy-atom valences are filled with implicit hydrogens.' : 'Valid structure; no name in the offline name map.', structure, hydrogens };
+      return { valid: true, graphToDraft, message: structure.knownName ? 'Valid structure. Unused heavy-atom valences are filled with implicit hydrogens.' : 'Valid structure; no name in the offline name map.', structure, hydrogens };
     } catch (error) { return invalid(error.message); }
   }
-  const api = { empty, addAtom, moveAtom, setElement, setCharge, setBond, removeAtom, removeBond, fromStructure, analyze, validate: checked, checked, toAdvanced, chemicalSignature, VAL, PERIODIC: Object.freeze([...PERIODIC]) };
+  const api = { empty, addAtom, moveAtom, elasticDrag, setElement, setCharge, setBond, removeAtom, removeBond, fromStructure, analyze, validate: checked, checked, toAdvanced, chemicalSignature, VAL, PERIODIC: Object.freeze([...PERIODIC]) };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.MoleculeSketcher = api;
 })(typeof self !== 'undefined' ? self : globalThis);

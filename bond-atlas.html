@@ -92,6 +92,11 @@ h1 { font-family: var(--display); font-size: clamp(25px, 3.4vw, 34px); line-heig
 .stage-formula { position: absolute; z-index: 2; top: calc(22px + env(safe-area-inset-top, 0px)); left: calc(24px + env(safe-area-inset-left, 0px)); pointer-events: none; font-family: var(--display); font-size: 27px; font-weight: 500; letter-spacing: -.5px; }
 .stage-caption { display: block; margin-top: 5px; color: var(--muted); font-family: var(--mono); font-size: 9px; letter-spacing: .6px; }
 #model3d, #model2d { position: absolute; inset: 0; width: 100%; height: 100%; }
+.inspection { padding: 10px 17px; border-block-start: 1px solid var(--line); }
+.inspection summary { cursor: pointer; font-weight: 700; }
+.inspection p { margin-block: 6px; font-size: .85rem; }
+.inspection-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+#inspection-picks, #inspection-value { font-family: var(--mono); font-weight: 600; }
 #model3d { touch-action: none; } #model3d canvas { max-width: 100%; }
 .stage-corner { position: absolute; z-index: 3; top: calc(21px + env(safe-area-inset-top, 0px)); right: calc(20px + env(safe-area-inset-right, 0px)); display: flex; gap: 7px; }
 .switch-button { font-family: var(--mono); font-size: 10px; border-radius: 5px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); padding: 7px 9px; min-height: 31px; }
@@ -277,16 +282,36 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     <div class="top-meta"><label class="language-control" for="language-select"><span data-i18n="shell.language">Language</span><select id="language-select" aria-label="Interface language" data-i18n-aria-label="shell.language"></select></label><button class="plain-button preferences-button" id="preferences-button" type="button" aria-haspopup="dialog" data-i18n="shell.preferences">Display &amp; accessibility</button><button class="plain-button" id="about-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 11v5m0-9v.1"></path></svg><span data-ui-label>Help &amp; scope</span></button></div>
   </header>
   <section class="intro"><div><h1>Molecules, from every angle.</h1><p>Build a structure. Explore its stereoisomers. See how one molecule can take different shapes.</p></div><div class="local-note">A CHEMISTRY VISUALIZATION LAB</div></section>
-  <nav class="lab-navigation" aria-label="Chemistry workspace"><button class="lab-view-button" id="show-explorer" type="button" aria-pressed="true">Explore isomers</button><button class="lab-view-button" id="show-stereo" type="button" aria-pressed="false">Stereo &amp; conformers</button><button class="lab-view-button" id="show-builder" type="button" aria-pressed="false">Build a molecule</button><button class="plain-button" id="focus-viewer" type="button" hidden>View selected molecule ↓</button><span id="workspace-context">Constitutional isomers</span></nav>
+  <nav class="lab-navigation" aria-label="Chemistry workspace"><button class="lab-view-button" id="show-explorer" type="button" aria-pressed="true">Explore isomers</button><button class="lab-view-button" id="show-stereo" type="button" aria-pressed="false">Stereo &amp; conformers</button><button class="lab-view-button" id="show-builder" type="button" aria-pressed="false">2D simulator</button><button class="plain-button" id="focus-viewer" type="button" hidden>View selected molecule ↓</button><span id="workspace-context">Constitutional isomers</span></nav>
   <main id="main-content" tabindex="-1" aria-label="Chemistry workspace">
   <div id="form-error" role="alert" hidden></div>
   <section id="builder-panel" class="builder-panel" aria-labelledby="builder-title" hidden>
-    <div class="builder-heading"><div><h2 id="builder-title">Molecule builder</h2><p>Drag elements onto the canvas. Choose a bond, then drag between atoms or tap two atoms.</p></div><div class="builder-heading-actions"><button class="plain-button" id="builder-load-selected" type="button">Edit viewer structure</button><label class="builder-example-label" for="builder-example">Example<select class="compact-select" id="builder-example"><option value="">Load an example…</option><option value="ethanol">Ethanol</option><option value="acetone">Acetone</option><option value="but-1-yne">But-1-yne</option><option value="benzene">Benzene</option></select></label></div></div>
-    <div class="builder-palette" aria-label="Drawing tools"><div class="builder-tool-group" id="builder-elements" role="group" aria-label="Elements"></div><div class="builder-tool-group" id="builder-bonds" role="group" aria-label="Bonds"></div><div class="builder-tool-group" role="group" aria-label="Ring templates"><button class="builder-tool" id="builder-ring" type="button" aria-pressed="false" title="Click and place, or drag a regular benzene ring onto the canvas">⌬ <small>Benzene</small></button></div><div class="builder-tool-group" role="group" aria-label="Edit tools"><button class="builder-tool" id="builder-move" type="button" aria-pressed="true" title="Select and drag atoms or bonds to move them">Move</button><button class="builder-tool" id="builder-erase" type="button" aria-pressed="false" title="Tap an atom or bond to delete it">Erase</button></div></div>
-    <div class="builder-body"><div class="builder-drawing"><div class="builder-canvas-bar"><span id="builder-tool-hint">Move · drag atoms to rearrange the drawing</span><div class="builder-arrange"><button class="plain-button" id="builder-ideal" type="button">Ideal bond angles</button><button class="plain-button" id="builder-fit" type="button">Fit</button></div></div><svg id="builder-canvas" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Molecule drawing canvas" aria-describedby="builder-help" tabindex="0"><title>Molecule drawing canvas</title></svg><div class="builder-canvas-footer"><span id="builder-counts">Example · ethanol</span><div><button class="plain-button" id="builder-undo" type="button" disabled>Undo</button><button class="plain-button" id="builder-redo" type="button" disabled>Redo</button><button class="plain-button" id="builder-clear" type="button">Clear</button></div></div><p id="builder-help">Hydrogens fill unused valences automatically. Each separate fragment is its own structure. •• marks a lone pair. C⁺ has an empty p orbital, not a lone pair. Positions change the drawing, not the identity.</p></div>
+    <div class="builder-heading"><div><h2 id="builder-title">2D molecule simulator</h2><p>Sketch a molecule, move its atoms, then explore the same structure in 3D.</p></div><div class="builder-heading-actions"><button class="plain-button" id="builder-load-selected" type="button">Edit viewer structure</button><label class="builder-example-label" for="builder-example">Example<select class="compact-select" id="builder-example"><option value="">Load an example…</option><option value="ethanol">Ethanol</option><option value="acetone">Acetone</option><option value="but-1-yne">But-1-yne</option><option value="benzene">Benzene</option></select></label><button class="plain-button" id="builder-split" type="button" aria-controls="builder-split-pane" aria-pressed="false" data-i18n="split.action">Side by side</button><button class="action-button" id="builder-open-viewer" data-i18n="sim.preview" type="button" disabled>View in 3D</button></div></div>
+    <a class="recovery-reminder" href="#draft-recovery-restore" data-i18n="learn.saved">A saved sketch is available</a>
+    <p class="builder-message" id="builder-message" role="status" hidden></p>
+    <details id="drawing-tools" open><summary data-i18n="learn.tools">Drawing tools · atoms and bonds</summary><div class="builder-palette" aria-label="Drawing tools"><div class="builder-tool-group" id="builder-elements" role="group" aria-label="Elements"></div><div class="builder-tool-group" id="builder-bonds" role="group" aria-label="Bonds"></div><div class="builder-tool-group" role="group" aria-label="Ring templates"><button class="builder-tool" id="builder-ring" type="button" aria-pressed="false" title="Click and place, or drag a regular benzene ring onto the canvas">⌬ <small>Benzene</small></button></div><div class="builder-tool-group" role="group" aria-label="Edit tools"><button class="builder-tool" id="builder-move" type="button" aria-pressed="true" title="Select and drag atoms or bonds to move them">Move</button><button class="builder-tool" id="builder-elastic" type="button" aria-pressed="false" data-i18n="sim.drag">Elastic drag</button><button class="builder-tool" id="builder-erase" type="button" aria-pressed="false" title="Tap an atom or bond to delete it">Erase</button></div></div>
+    </details>
+    <div class="builder-body"><div class="builder-drawing"><div class="builder-canvas-bar"><div class="sketch-instructions"><strong id="sketch-identity" dir="auto"></strong><span id="builder-tool-hint">Move · drag atoms to rearrange the drawing</span></div><div class="builder-arrange"><button class="plain-button" id="builder-ideal" type="button">Ideal bond angles</button><button class="plain-button" id="builder-fit" type="button">Fit</button></div></div><svg id="builder-canvas" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Molecule drawing canvas" aria-describedby="builder-help" tabindex="0"><title>Molecule drawing canvas</title></svg><div class="builder-canvas-footer"><span id="builder-counts">Example · ethanol</span><div><button class="plain-button" id="builder-undo" type="button" disabled>Undo</button><button class="plain-button" id="builder-redo" type="button" disabled>Redo</button><button class="plain-button" id="builder-clear" type="button">Clear</button></div></div><p id="builder-help" data-i18n="learn.canvasHint">Move an atom to change the drawing. Use a bond tool to change which atoms are connected.</p>
+      <section class="notebook" aria-labelledby="notebook-title"><header><span aria-hidden="true">Q &amp; A</span><h3 id="notebook-title" data-i18n="learn.practice">Predict &amp; check</h3></header>
+        <p data-i18n="learn.instruction">Make a prediction, then open the question to check your reasoning.</p>
+        <details><summary data-i18n="learn.q1">If you drag an atom, does the molecular formula change?</summary><p data-i18n="learn.a1">No. Try moving an atom and check the formula. The atoms and bonds are the same; only the drawing changed.</p></details>
+        <details><summary data-i18n="learn.q2">Is an angle on the sketch the angle in 3D?</summary><p data-i18n="learn.a2">Not necessarily. In a 3D conformer, select three atoms in order. The second is the vertex. Compare that measurement with the sketch.</p></details>
+        <details><summary data-i18n="learn.q3">Can two molecules with the same formula and bonds differ?</summary><p data-i18n="learn.a3">Yes. Compare cis- and trans-but-2-ene in Stereo &amp; conformers. Their methyl groups are on the same side of the double bond in cis and on opposite sides in trans.</p></details>
+      </section></div>
+    <section id="builder-split-pane" aria-labelledby="split-title" hidden>
+      <header class="split-bar"><h3 id="split-title" data-i18n="split.title">Model preview</h3><button type="button" class="plain-button" id="split-refresh" data-i18n="split.refresh" hidden>Update preview</button></header>
+      <p id="split-stale" role="status" data-i18n="split.stale" hidden>Sketch changed. Update the preview to link atoms again.</p>
+    </section>
     <aside class="builder-inspector" aria-label="Live molecule identification"><div class="builder-identity" aria-live="polite" aria-atomic="true"><span class="field-label" id="builder-scene-label">What you’ve made</span><label for="builder-component" class="builder-component-label">Structure<select class="compact-select" id="builder-component"></select></label><h3 id="builder-name">Ethanol</h3><p class="builder-formula" id="builder-formula">C₂H₆O</p><p class="builder-recognition" id="builder-recognition">Matched by connectivity in the offline naming library.</p><dl class="builder-properties"><div><dt>Molar mass</dt><dd id="builder-mass">46.07 g/mol</dd></div><div><dt>Total atoms</dt><dd id="builder-total">9</dd></div><div><dt>Unsaturation</dt><dd id="builder-dbe">0 DBE</dd></div><div><dt>Groups</dt><dd id="builder-groups">Primary alcohol</dd></div><div><dt>SMILES</dt><dd id="builder-smiles">CCO</dd></div></dl><p class="builder-chemistry-note" id="builder-chemistry-note">Structural recognition only; this does not establish stability or safety.</p></div>
     <div class="builder-selection"><h3>Selected atom or bond</h3><p id="builder-selection-label">Choose Move, then select an atom or bond.</p><div id="builder-atom-controls" hidden><label for="builder-replace-element">Element</label><select id="builder-replace-element" class="compact-select"></select><button class="plain-button" id="builder-grow" type="button" title="Attach the last chosen element with a single bond">Attach atom</button><label for="builder-charge">Charge</label><select id="builder-charge" class="compact-select"><option value="0">Neutral</option><option value="1">C⁺ carbocation</option></select></div><div id="builder-bond-controls" hidden><label for="builder-change-order">Bond order</label><select id="builder-change-order" class="compact-select"><option value="1">Single</option><option value="2">Double</option><option value="3">Triple</option></select></div><button class="plain-button" id="builder-delete" type="button" hidden>Delete selection</button></div>
-    <p class="builder-angle-note" id="builder-angle-note">2D positions are freely editable. Use Ideal bond angles to tidy the drawing.</p><label class="builder-check"><input id="builder-lone-pairs" type="checkbox"> Show lone pairs (••)</label><label class="builder-check"><input id="builder-clouds" type="checkbox"> Show π clouds in 3D</label><p class="builder-message" id="builder-message" role="status" hidden></p><button class="action-button" id="builder-open-viewer" type="button">Open selected structure in 3D →</button><button class="plain-button" id="builder-open-all" type="button" hidden>Show all structures together in 3D →</button><div class="builder-projection-actions"><button class="plain-button" id="builder-to-fischer" type="button">Fischer view</button><button class="plain-button" id="builder-to-newman" type="button">Newman view</button></div><p class="builder-scope">Separate fragments are identified as separate structures, never one molecule. C, H, N, O, F, Cl, Br, I; up to 64 non-hydrogen atoms per sketch. Carbon +1 carbocations are visualization-only. Names use a finite offline library. Projections illustrate arrangements; no R/S assignment is inferred.</p></aside></div>
+    <label class="builder-check" for="builder-angle-mode"><span data-i18n="builder.layoutMode">Move tool · 2D angles</span><select class="compact-select" id="builder-angle-mode" aria-describedby="builder-layout-help"><option value="free" data-i18n="builder.freeAngles">Free</option><option value="ideal" data-i18n="builder.snapAngles">Idealized chain ends</option></select></label><p class="builder-angle-note" id="builder-layout-help" data-i18n="builder.layoutHelp">Idealized Move snaps a chain end at a two-bond carbon to a 120° zigzag or 180° line. Other moves are free. Tidy redraws once. These are drawing guides, not measured 3D angles.</p><p class="builder-angle-note" id="builder-angle-note" hidden></p><label class="builder-check"><input id="builder-lone-pairs" type="checkbox"> Show lone pairs (••)</label><label class="builder-check"><input id="builder-clouds" type="checkbox"> Show π clouds in 3D</label><button class="plain-button" id="builder-open-all" type="button" hidden>Show all structures together in 3D →</button><div class="builder-projection-actions"><button class="plain-button" type="button" id="builder-to-skeletal" data-i18n="viewer.skeletal">Skeletal formula</button><button class="plain-button" id="builder-to-fischer" type="button">Fischer view</button><button class="plain-button" id="builder-to-newman" type="button">Newman view</button></div><p class="builder-scope">Separate fragments are identified as separate structures, never one molecule. C, H, N, O, F, Cl, Br, I; up to 64 non-hydrogen atoms per sketch. Carbon +1 carbocations are visualization-only. Names use a finite offline library. Projections illustrate arrangements; no R/S assignment is inferred.</p></aside></div>
+    <div class="draft-recovery">
+      <label class="builder-check"><input id="draft-recovery-enable" type="checkbox" autocomplete="off" aria-describedby="draft-recovery-help"><span data-i18n="recovery.enable">Keep a recovery copy in this browser</span></label>
+      <p class="input-note" id="draft-recovery-help" data-i18n="recovery.help">Anyone using this browser profile can restore the drawing. Turn this off to delete the copy. Restoring an RDKit draft checks it on this site's chemistry server.</p>
+      <p id="draft-recovery-status" role="status" hidden></p>
+      <button class="plain-button" type="button" id="draft-recovery-restore" data-i18n="recovery.restore" hidden>Restore draft</button>
+      <button class="plain-button" type="button" id="draft-recovery-discard" data-i18n="recovery.discard" hidden>Discard saved copy</button>
+    </div>
   </section>
   <div id="explorer-panel" data-view="explorer">
   <div id="constitutional-controls">
@@ -347,8 +372,15 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
         </div>
       </div>
       <div id="cloud-message" role="status" hidden></div>
+      <details id="atom-inspection" class="inspection" hidden>
+        <summary data-i18n="inspect.title">Inspect atoms &amp; measure</summary>
+        <p data-i18n="inspect.help">Click atoms in 3D or use the list. Pick two for distance or three for an angle at the middle atom. Pick again to remove; a fourth starts over.</p>
+        <div class="inspection-controls"><label for="inspection-atom" data-i18n="inspect.atom">Atom</label><select id="inspection-atom" class="compact-select" dir="ltr"></select><button id="inspection-pick" type="button" class="plain-button" data-i18n="inspect.pick">Select / remove</button><button id="inspection-clear" type="button" class="plain-button" data-i18n="inspect.clear">Clear selection</button></div>
+        <div role="status" aria-live="polite" aria-atomic="true"><p id="inspection-picks" dir="auto"></p><p id="inspection-value"></p><p class="method-note" id="inspection-source"></p></div>
+      </details>
       <div class="model-info" id="model-info">
         <div class="model-info-top"><div><h2 id="selected-name">Butan-1-ol</h2><p id="selected-description">Primary alcohol · Unassigned stereochemistry</p><p id="selected-method" class="method-note"></p></div><button class="copy-button" id="copy-smiles" type="button" title="Copy the selected structure as SMILES"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"></rect><path d="M12 7V3H3v9h4"></path></svg><span id="copy-label">Copy SMILES</span></button></div>
+        <button class="plain-button" id="edit-in-builder" type="button">Edit in 2D</button>
         <p id="connectivity-name" hidden><span data-i18n="reason.nameLabel">Systematic name (connectivity only):</span> <bdi id="connectivity-name-value" dir="ltr" lang="en"></bdi></p>
         <section id="structure-notes" class="structure-notes" aria-labelledby="notes-title" hidden>
           <header><h3 id="notes-title" data-i18n="notes.title">Reading the structure</h3><p data-i18n="notes.intro">What the atoms and bonds tell us, without a name lookup.</p></header>
@@ -359,7 +391,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
             <p id="notes-limits" class="notes-limits"></p>
           </details>
         </section>
-        <button class="plain-button" id="edit-in-builder" type="button">Edit this structure in builder →</button>
+
         <details id="structure-details" class="structure-details"><summary>Structure &amp; calculation details</summary>
         <dl class="properties"><div class="property"><dt>Molar mass</dt><dd id="mass-value">74.12 g/mol</dd></div><div class="property"><dt>Total atoms</dt><dd id="atoms-value">15</dd></div><div class="property"><dt>Unsaturation</dt><dd id="dbe-value">0 DBE</dd></div><div class="property"><dt>SMILES</dt><dd id="selected-smiles">CCCCO</dd></div></dl>
         <dl class="properties"><div class="property"><dt>Bond orders</dt><dd id="bond-orders">Single 14 · Double 0 · Triple 0</dd></div></dl>
@@ -372,7 +404,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
       </div>
     </section>
   </section>
-  <section class="export-bar" aria-label="Export molecular structures"><div class="export-heading"><span>Keep your structures</span><small>Export a file to keep your work. Drafts are not saved automatically.</small></div><div class="export-controls"><label for="export-target" hidden>Structures to export</label><select id="export-target" class="compact-select" aria-label="Structures to export"><option value="selected">Selected structure</option><option value="filtered">All matching structures</option><option value="conformers">Selected · all conformers (SDF/JSON)</option></select><select id="export-format" class="compact-select" aria-label="Export format"><option value="smiles">SMILES (.smi)</option><option value="mol">MOL · selected geometry (.mol)</option><option value="sdf">SDF · 2D (.sdf)</option><option value="xyz">XYZ · 3D (.xyz)</option><option value="json">Orgchem Visualizer JSON</option><option value="csv">Results table (.csv)</option><option value="png">2D image (.png)</option></select><button class="plain-button" id="preview-export" type="button">Preview / copy</button><button class="action-button" id="download-export" type="button">Download</button></div></section>
+  <section class="export-bar" aria-label="Export molecular structures"><div class="export-heading"><span>Keep your structures</span><small>Export a file to keep your work beyond this browser.</small></div><div class="export-controls"><label for="export-target" hidden>Structures to export</label><select id="export-target" class="compact-select" aria-label="Structures to export"><option value="selected">Selected structure</option><option value="filtered">All matching structures</option><option value="conformers">Selected · all conformers (SDF/JSON)</option></select><select id="export-format" class="compact-select" aria-label="Export format"><option value="smiles">SMILES (.smi)</option><option value="mol">MOL · selected geometry (.mol)</option><option value="sdf">SDF · 2D (.sdf)</option><option value="xyz">XYZ · 3D (.xyz)</option><option value="json">Orgchem Visualizer JSON</option><option value="csv">Results table (.csv)</option><option value="png">2D image (.png)</option></select><button class="plain-button" id="preview-export" type="button">Preview / copy</button><button class="action-button" id="download-export" type="button">Download</button></div></section>
   <div class="status-row"><span class="status-text"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10 3 3 7-7"></path><circle cx="10" cy="10" r="8"></circle></svg><span id="calculation-status" aria-live="polite">Complete enumeration within the supported valence model</span></span><span>3D coordinates are illustrative, not energy-minimized.</span></div>
   </div>
   <details class="coverage" id="coverage"><summary><span>How this lab works</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5"></path></svg></summary><p id="technical-language-note" class="technical-language-note" data-i18n="shell.scopeNote">Detailed technical scope below is provided in its original English. Interface translations do not change chemical data.</p><div class="coverage-body" lang="en"><section><h3>Exhaustive within a defined model</h3><p>Every unique connected, neutral, closed-shell bonding graph for supported formulas. Carbon has valence 4, nitrogen 3, oxygen 2, and F, Cl, Br and I valence 1. Rings, branching and multiple bonds are included. Unstable or highly strained candidates remain available but receive lower priority when peroxide, enol, strained-ring or other flagged motifs are detected. The score is a structural heuristic, not a measurement or reliable prediction of stability.</p></section><section><h3>Small molecules, clear limits</h3><p>Formula searches support 12 heavy atoms at DBE 0, 10 at DBE 1, 9 at DBE 2, and 7 at DBE 3–4. Offline structure viewing supports 64 heavy atoms; the RDKit service accepts 256 base atoms, up to 64 stereo results and 50 requested conformers per calculation. Each ring or double bond adds one DBE; a triple bond adds two. Searches stop at 22 seconds or 12,000 candidates with an explanation, never a partial list labeled complete. Imported structures are not an exhaustive isomer search.</p></section><section><h3>Configuration and conformation</h3><p>The RDKit workspace separates supported R/S and E/Z stereoisomers and samples conformers without mixing configurations. Charges, radicals, isotopes and salts are supported where the toolkit and selected format can preserve them. The neutral-only and explicit-Kekulé restrictions apply to the offline compatibility parser, not the RDKit service. Unsupported chemical annotations are reported rather than silently discarded. Primary halogenoalkanes include methyl halides here. Legacy coordinates remain illustrative; the RDKit view uses the selected stereo-verified conformer and reports its geometry method. Qualitative π clouds are separate from imported quantum grids.</p></section></div></details>
@@ -392,6 +424,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 <script src="geometry.js"></script>
 <script src="formats.js"></script>
 <script src="molecule-record.js"></script>
+<script src="atom-inspection.js"></script>
 <script src="chemistry-client.js"></script>
 <script src="structure-notes.js"></script>
 <script>
@@ -402,12 +435,34 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   const T=(key,params={},fallback)=>I?I.t(key,params,fallback):(typeof fallback==='string'?fallback:key).replace(/\{(\w+)\}/g,(token,name)=>(typeof params==='function'?params():params)[name]??token);
   function ui(target,key,params={},fallback){const node=typeof target==='string'?$(target):target;if(!node)return;if(I)I.bindText(node,key,params,fallback);else node.textContent=T(key,params,fallback);}
   function uiAttr(target,attribute,key,params={},fallback){const node=typeof target==='string'?$(target):target;if(!node)return;if(I)I.bindAttr(node,attribute,key,params,fallback);else node.setAttribute(attribute,T(key,params,fallback));}
-  function stereoText(iso){const text=R.stereoLabel(iso);return text==='Unassigned stereochemistry'?T('viewer.unassigned',{},text):text==='No assigned stereogenic features'?T('viewer.noFeatures',{},text):text;}
+  function stereoText(iso){const text=R.stereoLabel(iso,T('stereo.unspecified'),T('stereo.assignedUnknown'));return text==='Unassigned stereochemistry'?T('viewer.unassigned',{},text):text==='No assigned stereogenic features'?T('viewer.noFeatures',{},text):text;}
   function sourceText(source){const known={'Local systematic name parser':'reason.parsedName','Offline name map':'reason.familiarName','3D stereoisomer comparison':'viewer.sceneSource','Backend conformer sampling':'viewer.conformerSource','Selected stereoisomer conformer':'viewer.selectedSource','Possible stereoisomers':'viewer.possibleSource'};if(known[source])return T(known[source]);const imported=/^RDKit (SMILES|JSON|MOL|SDF) import$/.exec(source||'');return imported?T('explorer.importSource',{format:imported[1]}):source;}
   const state = { labView:'explorer', pendingScene:null, sortReference:null, clouds:false, lonePairs:false, together:false, electronShapes:[], sceneGeometries:[], result: null, filtered: [], selected: null, mode: '3d', hydrogens: true, labels: false, rotating: false, viewer: null, initialView: null, renderFailed: false, busy: false, generation: 0, visibleLimit: 40 };
   const layoutCache = new Map(), geomCache = new Map(), imageCache = new Map();
   let visibilityFrame=null;
   const R=window.MoleculeRecords;
+  const inspection=AtomInspection.controller((detail,changedMolecule)=>{
+    const panel=$('atom-inspection'),list=$('inspection-atom');
+    panel.hidden=!detail.molecule;
+    if(changedMolecule){
+      list.replaceChildren(...inspection.entries.map((entry,i)=>{
+        const option=new Option(entry.label,String(i));
+        if(entry.graphIndex===null)ui(option,'inspect.only3d',{atom:entry.label});
+        return option;
+      }));
+    }else if(detail.labels.length)panel.open=true;
+    $('inspection-clear').disabled=!detail.labels.length;
+    if(detail.labels.length)ui('inspection-picks','inspect.picked',{atoms:detail.labels.join(' → ')});else ui('inspection-picks','inspect.empty');
+    const m=inspection.measurement();
+    if(m)ui('inspection-value','inspect.'+m.kind,()=>({value:m.value.toLocaleString(I?.locale||'en',{minimumFractionDigits:m.kind==='angle'?1:2,maximumFractionDigits:m.kind==='angle'?1:2})}));
+    else ui('inspection-value',detail.labels.length>=2?'inspect.undefined':'viewer.empty');
+    const c=R.isRecord(detail.molecule)&&R.conformer(detail.molecule);
+    ui('inspection-source',!detail.molecule?'viewer.empty':c?'inspect.conformer':R.isRecord(detail.molecule)?'inspect.missing':'inspect.illustrative',{method:c?.method||'—'});
+    if(!changedMolecule&&state.mode==='3d'&&$('model3d').getBoundingClientRect().width)style3D();
+    document.dispatchEvent(new CustomEvent('bondatlas:inspection',{detail}));
+  });
+  $('inspection-pick').addEventListener('click',()=>inspection.toggleEntry($('inspection-atom').selectedIndex));
+  $('inspection-clear').addEventListener('click',inspection.api.clear);
   const geometryKey=g=>R.cacheKey(g);
   function getGeometry3D(g){if(R.isRecord(g))return R.geometry(g);const key=geometryKey(g);if(!geomCache.has(key))geomCache.set(key,MoleculeGeometry.layout3D(g));return geomCache.get(key);}
   const elementNames = { C:'Carbon', H:'Hydrogen', O:'Oxygen', N:'Nitrogen', F:'Fluorine', Cl:'Chlorine', Br:'Bromine', I:'Iodine' };
@@ -415,9 +470,14 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   const priority = ['carbocation','primary-alcohol','secondary-alcohol','tertiary-alcohol','primary-halogenoalkane','secondary-halogenoalkane','tertiary-halogenoalkane','carboxylic-acid','ester','amide','aldehyde','ketone','ether','amine','nitrile','peroxide','enol','alkyne','alkene','alkane','cyclic'];
   const color = key => getComputedStyle(document.documentElement).getPropertyValue(key).trim();
   const elementColor = e => color('--atom-' + e) || color('--ink');
+  const wideSplit=matchMedia('(min-width:1001px)');
   function alignWorkspaces(){
     const stage=$('workspace'),detail=$('stereo-detail'),mobile=matchMedia('(max-width:900px)').matches&&state.labView==='stereo';
-    if(mobile&&detail&&stage.parentElement!==$('stereo-explorer'))detail.before(stage);
+    const split=state.labView==='builder'&&state.split&&wideSplit.matches;
+    $('builder-split-pane').hidden=!split; $('builder-panel').dataset.split=String(!!split);
+    if(!split)stage.inert=false;
+    if(split){if(stage.parentElement!==$('builder-split-pane'))$('builder-split-pane').append(stage);}
+    else if(mobile&&detail&&stage.parentElement!==$('stereo-explorer'))detail.before(stage);
     else if(!mobile&&stage.parentElement!==$('explorer-panel'))$('explorer-panel').insertBefore(stage,document.querySelector('.export-bar'));
   }
   matchMedia('(max-width:900px)').addEventListener('change',alignWorkspaces);
@@ -430,6 +490,8 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   }
   function showView(view){
     if(view==='builder')cancelPendingScene();
+    else state.split=false;
+    $('builder-split').setAttribute('aria-pressed',String(!!state.split));
     state.labView=view;alignWorkspaces();$('builder-panel').hidden=view!=='builder';$('explorer-panel').hidden=view==='builder';$('explorer-panel').dataset.view=view;
     $('constitutional-controls').hidden=view!=='explorer';$('stereo-explorer').hidden=view!=='stereo';
     $('workspace').hidden=view==='stereo'&&!R.isRecord(state.selected);
@@ -438,13 +500,18 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     $('focus-viewer').hidden=view!=='stereo'||!R.isRecord(state.selected);
     const emptyStereo=view==='stereo'&&!R.isRecord(state.selected);document.querySelector('.export-bar').hidden=emptyStereo;document.querySelector('.status-row').hidden=emptyStereo;
     if(visibilityFrame!==null)cancelAnimationFrame(visibilityFrame);
-    visibilityFrame=view==='builder'?null:requestAnimationFrame(()=>{
+    visibilityFrame=view==='builder'&&!state.split?null:requestAnimationFrame(()=>{
       visibilityFrame=null;
-      if(state.labView==='builder'||!state.selected)return;
+      if((state.labView==='builder'&&!state.split)||!state.selected)return;
       const visible=$('model-stage').getBoundingClientRect();
       if(visible.width&&visible.height)renderMolecule(false);
     });
   }
+  function setSplit(on){
+    state.split=!!on&&wideSplit.matches;
+    showView('builder');
+  }
+  wideSplit.addEventListener('change',()=>{if(state.split&&!wideSplit.matches)setSplit(false);});
   function formulaHTML(formula) { return String(formula).split(/(\[\d+[A-Z][a-z]?\])/).map(part=>/^\[(\d+)([A-Z][a-z]?)\]$/.test(part)?part.replace(/^\[(\d+)([A-Z][a-z]?)\]$/,'<sup>$1</sup>$2'):part.replace(/(\d+)/g,'<sub>$1</sub>')).join(''); }
   function prettyFormula(formula) { return R.prettyFormula(formula); }
   function mainTag(g) { const tag=priority.find(tag=>g.tags.includes(tag));return T('explorer.tag.'+(tag||'valid'),{},tagNames[tag]||'Valence-valid structure'); }
@@ -601,7 +668,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     ui('load-more','explorer.more',()=>({count:Math.min(40,Math.max(0,state.filtered.length-state.visibleLimit)),shown:Math.min(state.visibleLimit,state.filtered.length)}));
     $('stage-formula').innerHTML=formulaHTML(state.result.formula);
     const list=$('isomer-list');list.replaceChildren();
-    if(!state.filtered.length){const p=document.createElement('p');p.className='empty-list';ui(p,'explorer.emptyGroup',()=>({group:T('explorer.tag.'+group,{},tagNames[group]||'—')}));list.append(p);state.selected=null;stopRotation();$('stage-empty').hidden=false;$('model-info').hidden=true;return;}
+    if(!state.filtered.length){const p=document.createElement('p');p.className='empty-list';ui(p,'explorer.emptyGroup',()=>({group:T('explorer.tag.'+group,{},tagNames[group]||'—')}));list.append(p);state.selected=null;inspection.reset(null);stopRotation();$('stage-empty').hidden=false;$('model-info').hidden=true;return;}
     $('stage-empty').hidden=true;$('model-info').hidden=false;
     for(const iso of state.filtered.slice(0,state.visibleLimit)){
       const button=document.createElement('button');button.type='button';button.className='isomer-card';button.setAttribute('aria-pressed','false');uiAttr(button,'aria-label','viewer.cardLabel',()=>({name:iso.name,description:allDescriptions(iso)}));button.dataset.id=iso.id;
@@ -616,7 +683,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   function drawThumbnails(){ const buttons=$('isomer-list').querySelectorAll('.isomer-card');buttons.forEach((b,i)=>{if(state.filtered[i])drawStructure(b.querySelector('canvas'),state.filtered[i],'skeletal',true);}); }
   function selectIsomer(iso) {
     if(state.selected?.id!==iso.id)cancelPendingScene();
-    state.selected=iso;$('name-consent').checked=false;ui('name-feedback','viewer.empty');
+    state.selected=iso;inspection.reset(iso,getGeometry3D(iso),R.isRecord(iso));$('name-consent').checked=false;ui('name-feedback','viewer.empty');
     $('isomer-list').querySelectorAll('.isomer-card').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===iso.id)));
     $('selected-name').textContent=iso.name;ui('selected-description','viewer.description',()=>({group:allDescriptions(iso),stereo:stereoText(iso)}));
     const generated=SystematicNames.generate(iso);
@@ -659,7 +726,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     if(state.renderFailed) return null;
     try {
       if(!window.$3Dmol) throw Error('3D library unavailable');
-      state.viewer=$3Dmol.createViewer($('model3d'),{backgroundColor:color('--stage'),backgroundAlpha:0,antialias:true,orthographic:true});
+      state.viewer=$3Dmol.createViewer($('model3d'),{backgroundColor:color('--stage'),backgroundAlpha:0,antialias:true,orthographic:true,minimumZoomToDistance:2.4});
       ViewerLifecycle.manage(state.viewer);
       // The workbench owns visibility-aware resize scheduling. Disconnect the
       // library's duplicate observers to avoid hidden-canvas resize/render loops.
@@ -670,10 +737,9 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     } catch(e){state.renderFailed=true;ui('renderer-message','viewer.no3D');$('renderer-message').hidden=false;return null;}
   }
   function setElectrons(clouds,pairs){
-    const reveal=!!clouds&&!state.clouds;
     state.clouds=!!clouds;state.lonePairs=!!pairs;
     $('cloud-button').setAttribute('aria-pressed',String(state.clouds));$('pairs-button').setAttribute('aria-pressed',String(state.lonePairs));
-    if(state.viewer&&state.mode==='3d'&&$('model3d').getBoundingClientRect().width){renderElectrons();if(reveal&&state.mode==='3d'){state.viewer.rotate(28,'x');state.initialView=state.viewer.getView();}state.viewer.render();}
+    if(state.viewer&&state.mode==='3d'&&$('model3d').getBoundingClientRect().width){renderElectrons();state.viewer.render();}
   }
   function renderElectrons(){
     const v=state.viewer;if(!v)return;
@@ -686,7 +752,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
       for(const {iso,geometry} of models){
         if(state.clouds){
           const cloud=MoleculeOrbitals.clouds(iso,geometry);rings+=cloud.aromaticRings;multiple+=cloud.multipleBonds;
-          cloud.meshes.forEach(mesh=>state.electronShapes.push(v.addCustom({vertexArr:mesh.vertices,normalArr:mesh.normals,faceArr:mesh.faces,color:color('--cloud'),opacity:.85,side:2,wireframe:false})));
+          cloud.meshes.forEach(mesh=>state.electronShapes.push(v.addCustom({vertexArr:mesh.vertices,normalArr:mesh.normals,faceArr:mesh.faces,color:color('--cloud'),opacity:.58,side:2,wireframe:false})));
         }
         if(state.lonePairs)MoleculeOrbitals.lonePairs(iso,geometry).forEach(pair=>{
           pairs++;pair.dots.forEach(p=>state.electronShapes.push(v.addSphere({center:p,radius:.048,color:color('--pair'),opacity:1})));
@@ -724,17 +790,31 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     const viewer=state.viewer;if(!viewer)return;
     viewer.removeAllLabels();
     viewer.setStyle({},{});
-    const selection=state.hydrogens?{}:{predicate:atom=>atom.elem!=='H'||atom.isotope>0};
+    const selection=state.hydrogens?{}:{predicate:atom=>atom.elem!=='H'||atom.isotope>0||atom.formalCharge!==0};
     const scheme={};new Set(['C','H',...state.sceneGeometries.flatMap(g=>g.iso.atoms)]).forEach(e=>scheme[e]=elementColor(e));
-    viewer.setStyle(selection,{stick:{radius:0.105,singleBonds:false,colorscheme:scheme},sphere:{scale:0.27,colorscheme:scheme}});
-    if(state.labels) {
-      viewer.getModel().selectedAtoms(selection).forEach(atom=>viewer.addLabel(atom.elem,{position:atom,fontSize:12,fontColor:color('--ink'),backgroundColor:color('--surface'),backgroundOpacity:.88,borderThickness:0,inFront:true,showBackground:true}));
+    const stick={radius:.11,doubleBondScaling:.58,tripleBondScaling:.42,singleBonds:false,colorscheme:scheme};
+    viewer.setStyle(selection,{stick,sphere:{scale:.24,colorscheme:scheme}});
+    viewer.setStyle({...selection,elem:'H'},{stick,sphere:{radius:.20,colorscheme:scheme}});
+    const labelStyle={fontSize:12,fontColor:color('--ink'),backgroundColor:color('--surface'),backgroundOpacity:.94,padding:2,inFront:true};
+    const symbol=({elem,isotope,formalCharge:q})=>(isotope||'')+elem+(q?(Math.abs(q)>1?Math.abs(q):'')+(q>0?'+':'−'):'');
+    for(const atom of viewer.getModel()?.selectedAtoms(selection)||[]){
+      const slot=state.sceneGeometries[atom.sceneIndex]?.iso===state.selected?inspection.slot(atom.geometryIndex):-1;
+      if(slot<0&&!state.labels&&!atom.formalCharge&&!atom.isotope)continue;
+      viewer.addLabel(slot<0?symbol(atom):(slot+1)+' · '+symbol(atom),{...labelStyle,position:atom,alignment:'center',...(slot<0?{}:{fontSize:15,borderThickness:2,borderColor:color('--accent')})},undefined,true);
     }
-    viewer.setHoverable(selection,true,(atom,v)=>{if(state.labels)return;atom._tip=v.addLabel(T('builder.element.'+atom.elem,{},elementNames[atom.elem]||atom.elem)+' · '+atom.elem,{position:atom,fontSize:12,fontColor:color('--ink'),backgroundColor:color('--surface'),backgroundOpacity:.94,borderThickness:0,inFront:true});v.render();},(atom,v)=>{if(atom._tip){v.removeLabel(atom._tip);delete atom._tip;v.render();}});
+    viewer.setClickable({},false);
+    viewer.setClickable(selection,true,atom=>{
+      const iso=state.sceneGeometries[atom.sceneIndex]?.iso;
+      if(!iso||!state.filtered.includes(iso))return;
+      if(iso!==state.selected)selectIsomer(iso);
+      inspection.toggleGeometry(atom.geometryIndex);
+    });
+    viewer.setHoverable({},false);
+    viewer.setHoverable(selection,true,(atom,v)=>{if(state.labels)return;atom._tip=v.addLabel(T('builder.element.'+atom.elem,{},elementNames[atom.elem]||atom.elem)+' · '+symbol(atom),{...labelStyle,position:atom});},(atom,v)=>{if(atom._tip){v.removeLabel(atom._tip);delete atom._tip;}});
     renderElectrons();
-    state.sceneGeometries.forEach(({iso,geometry},k)=>{
-      if(state.together){const xs=geometry.atoms.map(a=>a.x),ys=geometry.atoms.map(a=>a.y);viewer.addLabel((k+1)+'. '+iso.name,{position:{x:(Math.min(...xs)+Math.max(...xs))/2,y:Math.min(...ys)-1.1,z:0},fontSize:11,fontColor:color('--ink'),backgroundColor:color('--surface'),backgroundOpacity:.9,borderThickness:0});}
-      iso.atoms.forEach((element,i)=>{const q=iso.charges?.[i]||0,mass=iso.isotopes?.[i]||0;if(q||mass){const a=geometry.atoms[i],label=(mass?mass+element:'')+(q?(Math.abs(q)>1?Math.abs(q):'')+(q>0?'+':'−'):'');viewer.addLabel(label,{position:{x:a.x+.3,y:a.y+.35,z:a.z+.25},fontSize:mass?12:19,fontColor:color('--accent'),showBackground:false,inFront:true});}});
+    if(state.together)state.sceneGeometries.forEach(({iso,geometry},k)=>{
+      const xs=geometry.atoms.map(a=>a.x),ys=geometry.atoms.map(a=>a.y);
+      viewer.addLabel((k+1)+'. '+iso.name,{...labelStyle,position:{x:(Math.min(...xs)+Math.max(...xs))/2,y:Math.min(...ys)-.7,z:0},alignment:'topCenter',fontSize:11},undefined,true);
     });
     viewer.render();
   }
@@ -750,17 +830,26 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
         const structures=state.together?state.filtered:[state.selected],cols=Math.ceil(Math.sqrt(structures.length));
         const geometries=structures.map(getGeometry3D);
         if(geometries.some(g=>!g)){setMode('skeletal');return;}
-        const spans=geometries.map(g=>Math.max(...['x','y'].map(k=>Math.max(...g.atoms.map(a=>a[k]))-Math.min(...g.atoms.map(a=>a[k])))));
-        const spacing=Math.max(...spans,3)+4,atoms=[];state.sceneGeometries=[];
+        const bounds=geometries.map(g=>['x','y','z'].map(axis=>{const v=g.atoms.map(a=>a[axis]);return [Math.min(...v),Math.max(...v)];}));
+        const spacing=Math.max(3,...bounds.flat().map(([lo,hi])=>hi-lo))+4,atoms=[];state.sceneGeometries=[];
         geometries.forEach((g,k)=>{
-          const dx=state.together?(k%cols-(cols-1)/2)*spacing:0,dy=state.together?-(Math.floor(k/cols))*spacing:0;
-          const geometry={atoms:g.atoms.map(a=>({...a,x:a.x+dx,y:a.y+dy})),bonds:g.bonds};state.sceneGeometries.push({iso:structures[k],geometry});
-          const base=atoms.length;geometry.atoms.forEach((a,j)=>{const i=structures[k].atomIds?structures[k].atomIds.indexOf(a.atomId):j;atoms.push({elem:a.e,isotope:structures[k].isotopes?.[i]||0,formalCharge:structures[k].charges?.[i]||0,x:a.x,y:a.y,z:a.z,serial:base+j,index:base+j,bonds:[],bondOrder:[]});});
+          // Imported conformers can have arbitrary origins. Center each grid cell
+          // by translation only; keep single models in their original grid frame.
+          const [cx,cy,cz]=bounds[k].map(([lo,hi])=>(lo+hi)/2);
+          const dx=state.together?(k%cols)*spacing-cx:0,dy=state.together?-Math.floor(k/cols)*spacing-cy:0,dz=state.together?-cz:0;
+          const geometry={atoms:g.atoms.map(a=>({...a,x:a.x+dx,y:a.y+dy,z:a.z+dz})),bonds:g.bonds};state.sceneGeometries.push({iso:structures[k],geometry});
+          const base=atoms.length;geometry.atoms.forEach((a,j)=>{const i=R.isRecord(structures[k])?structures[k].atomIds.indexOf(a.atomId):j;atoms.push({elem:a.e,isotope:structures[k].isotopes?.[i]||0,formalCharge:structures[k].charges?.[i]||0,x:a.x,y:a.y,z:a.z,serial:base+j,index:base+j,sceneIndex:k,geometryIndex:j,bonds:[],bondOrder:[]});});
           geometry.bonds.forEach(b=>{atoms[base+b.a].bonds.push(base+b.b);atoms[base+b.a].bondOrder.push(b.order);atoms[base+b.b].bonds.push(base+b.a);atoms[base+b.b].bondOrder.push(b.order);});
         });
         ui('stage-caption',state.together?'viewer.sceneCaption':'viewer.formulaCaption',{count:structures.length});
         const model=v.addModel();model.addAtoms(atoms);style3D();
-        v.resize();v.zoomTo();v.zoom(state.together ? 0.9 : state.selected.atoms.length>24 ? 1 : 1.45);v.rotate(state.clouds?35:12,'x');v.rotate(-15,'y');state.initialView=v.getView();v.render();if(spinning)v.spin('y',.45);
+        // 3Dmol's orthographic frustum is width-based. Leave room for atom
+        // radii and the stage controls on both tall and wide canvases.
+        v.resize();v.zoomTo();v.zoom(1.5*Math.min(1,visible.height/visible.width));
+        // zoomTo fits the bounds but leaves the previous rotation in place.
+        v.setView([...v.getView().slice(0,4),0,0,0,1,0,0]);
+        const [pitch,yaw]=state.together?[15,-10]:MoleculeGeometry.openingPose(geometries[0]);
+        v.rotate(pitch,'x');v.rotate(yaw,'y');state.initialView=v.getView();v.render();if(spinning)v.spin('y',.45);
       } else style3D();
       requestAnimationFrame(()=>{if(state.mode==='3d'&&$('model3d').getBoundingClientRect().width){v.resize();v.render();}});
     }else if(['skeletal','displayed'].includes(state.mode)) drawStructure($('model2d'),state.selected,state.mode,false);
@@ -815,7 +904,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.rotating)stopRotation();});
   if(document.fonts?.ready)document.fonts.ready.then(()=>{drawThumbnails();if(['skeletal','displayed'].includes(state.mode)&&state.selected)drawStructure($('model2d'),state.selected,state.mode,false);});
   window.BondAtlas={
-    state,showError,setMode,stopRotation,setElectrons,setTogether,showView,
+    state,inspection:inspection.api,showError,setMode,stopRotation,setElectrons,setTogether,showView,setSplit,
     selectStructure(id){const g=state.result?.isomers.find(g=>g.id===id);if(g)selectIsomer(g);},
     loadStructures(isomers,source){if(state.busy)throw Error('Wait for the current search or cancel it before importing.');isomers.forEach(g=>{if(R.isRecord(g))R.validate(g);});const had=R.isRecord(state.selected)&&!!R.geometry(state.selected);showError('');$('group-filter').value='all';$('input-mode').value='smiles';ui('find-label','shell.openStructure');$('formula-input').value=isomers[0].notation;setResults(importedResult(isomers,source));if(!had&&R.isRecord(state.selected)&&R.geometry(state.selected)&&['3d','skeletal'].includes(state.mode))setMode('3d');},
     searchFormula(formula){if(state.busy)throw Error('Wait for the current search or cancel it first.');$('input-mode').value='formula';$('formula-input').value=formula;$('group-filter').value='all';return search();},
@@ -834,6 +923,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 })();
 </script>
 <script src="interchange-ui.js"></script>
+<script src="draft-recovery.js"></script>
 <script src="sketcher-ui.js"></script>
 <script src="textbook-ui.js"></script>
 <script src="stereo-ui.js"></script>

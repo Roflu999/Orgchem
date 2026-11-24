@@ -1,4 +1,11 @@
-# Orgchem Visualizer: structure reasoning and chemical names
+# v3.2.0: Student molecule simulator
+
+- Sketch or edit a molecule in 2D, explore it in 3D, and return to the drawing. Desktop side-by-side mode links atom selection and flags out-of-date previews.
+- Choose freehand or idealized chain-end angles. Select two model atoms for distance or three for the angle at the middle atom. Measurements identify the geometry source.
+- Compare stereo-aware skeletal formulas for cis-, trans- and unspecified alkenes with E/Z annotations where assigned.
+- Recover unfinished drawings on this device when opted in. Student exercises cover connectivity, sketch versus conformer angles, and stereochemistry; phone layouts put the drawing before advanced tools.
+
+## Previous release: structure reasoning and chemical names
 
 - Enter a molecular formula and open **Follow the deduction** to see how hydrogen counts, valence and bond order constrain the possible structures. Counts come from the current search, before filtering.
 - Select a molecule and open **Reading the structure** to inspect the atoms and bonds behind recognized functional groups. Hydrogen-bond donor and acceptor counts describe potential sites, not measured properties.

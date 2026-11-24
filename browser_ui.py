@@ -40,6 +40,36 @@ def semantics(page):
     }''')
 
 
+def inspect_conformer(page):
+    """Exercise actual WebGL picking, then build a measurement without a pointer."""
+    page.locator('#model3d').scroll_into_view_if_needed()
+    point = page.evaluate('''() => {
+      const {viewer} = BondAtlas.state, atoms = viewer.getModel().selectedAtoms({});
+      const points = viewer.modelToScreen(atoms).map(p => ({x:p.x-scrollX, y:p.y-scrollY}));
+      const candidates = points.flatMap((p,i) => {
+        if(atoms[i].elem==='H' || !document.elementFromPoint(p.x,p.y)?.closest('#model3d')) return [];
+        const separation = Math.min(...points.filter((_,j)=>i!==j).map(q=>Math.hypot(p.x-q.x,p.y-q.y)));
+        return [{...p,separation}];
+      });
+      return candidates.sort((a,b)=>b.separation-a.separation)[0];
+    }''')
+    page.mouse.click(point['x'],point['y'])
+    expect(page.locator('#inspection-picks')).to_contain_text('Selected:')
+    picked = page.evaluate('BondAtlas.inspection.getSelection().atomIndices')
+    assert len(picked)==1 and picked[0] is not None, picked
+    chooser, pick = page.locator('#inspection-atom'), page.locator('#inspection-pick')
+    for i in [i for i in range(3) if i!=picked[0]][:2]:
+        chooser.focus(); page.keyboard.press('Home')
+        for _ in range(i): page.keyboard.press('ArrowDown')
+        page.keyboard.press('Tab'); expect(pick).to_be_focused(); page.keyboard.press('Enter')
+        length=len(page.evaluate('BondAtlas.inspection.getSelection().atomIndices'))
+        expect(page.locator('#inspection-value')).to_contain_text('Distance:' if length==2 else 'Angle:')
+    expect(page.locator('#inspection-source')).to_contain_text('selected conformer')
+    page.locator('#inspection-clear').click()
+    expect(page.locator('#inspection-picks')).to_have_text('No atoms selected.')
+    page.locator('#atom-inspection summary').click()
+
+
 def choose_language(page, locale):
     page.locator('#language-select').select_option(locale)
     expect(page.locator('html')).to_have_attribute('lang', locale)
@@ -59,6 +89,36 @@ def preferences(page, **values):
     page.locator('#close-preferences').click()
     expect(page.locator('#preferences-dialog')).to_be_hidden()
     expect(page.locator('#preferences-button')).to_be_focused()
+
+
+def student_walkthrough(page, captures=None):
+    """Protect the first phone-sized lesson without depending on a pixel-perfect theme."""
+    page.locator('#show-builder').click()
+    page.locator('#builder-example').select_option('ethanol')
+    tools = page.locator('#drawing-tools summary')
+    expect(page.locator('#builder-element-C')).to_be_hidden()
+    tools.press('Enter')
+    expect(page.locator('#builder-element-C')).to_be_visible()
+    tools.press('Enter')
+    expect(page.locator('#sketch-identity')).to_contain_text('Ethanol')
+    canvas_top = page.locator('#builder-canvas').bounding_box()['y']
+    title_top = page.locator('#builder-title').bounding_box()['y']
+    assert canvas_top - title_top < 510, 'Phone tools crowd the molecule off screen'
+    draft = page.evaluate('JSON.stringify(MoleculeBuilder.getDraft())')
+    if captures:
+        page.locator('#builder-title').evaluate("e=>e.scrollIntoView({block:'start'})")
+        page.screenshot(path=str(captures / 'student-phone-builder.png'))
+    q = page.locator('.notebook details').nth(1)
+    q.locator('summary').press('Enter')
+    expect(q.locator('p')).to_be_visible()
+    if captures:
+        page.locator('.notebook').screenshot(path=str(captures / 'student-practice.png'))
+    choose_language(page, 'ar')
+    expect(q.locator('p')).to_be_visible()
+    assert not semantics(page)['overflow']
+    assert page.evaluate('JSON.stringify(MoleculeBuilder.getDraft())') == draft
+    choose_language(page, 'en')
+    print('PASS phone canvas, keyboard drawing tools, atom identity and localized practice', flush=True)
 
 
 def main():
@@ -94,6 +154,8 @@ def main():
             page.locator('#stereo-num-confs').fill('3')
             page.locator('#stereo-make-conformers').click()
             expect(page.locator('#stereo-status')).to_contain_text('Conformer sampling completed',timeout=30000)
+            inspect_conformer(page)
+            print('PASS clickable 3D atoms and keyboard distance/angle measurements', flush=True)
             page.locator('#together-button').click()
             page.wait_for_function('() => BondAtlas.state.together && !BondAtlas.state.pendingScene',timeout=30000)
             page.locator('#model3d').focus()
@@ -192,6 +254,9 @@ def main():
             print('PASS locale switching retains builder draft, focus, selection and Undo',flush=True)
             page.locator('#show-stereo').click()
             page.set_viewport_size({'width':390,'height':844})
+            preferences(page,text='normal')
+            student_walkthrough(page,out if args.capture else None)
+            page.locator('#show-stereo').click()
             for locale in LOCALES:
                 choose_language(page,locale)
                 preferences(page,theme='dark' if locale in ('ar','de','zh-Hans') else 'light',text='large')

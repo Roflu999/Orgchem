@@ -240,9 +240,11 @@
     const score = [...flags.values()].reduce((s, f) => s + f.points, 0);
     return { score, label: score >= 40 ? 'Reactive / high strain' : score ? 'Reactivity / strain flag' : 'No flagged motifs', reasons: [...flags.values()].map(f => f.reason), method: 'Structural heuristic only; not measured or predicted thermodynamic stability.' };
   }
-  function describe(g, name) {
+  function describe(g, name, onAtomOrder) {
+    const heavy = onAtomOrder && g.atoms.map((e,i)=>e==='H'?-1:i).filter(i=>i>=0);
     g = normalizeGraph(g);
     const { key, order } = canonical(g), h = { atoms: order.map(i => g.atoms[i]), m: order.map(i => order.map(j => g.m[i][j])) };
+    if(onAtomOrder)onAtomOrder(order.map(i=>heavy[i]));
     const bonds = []; h.m.forEach((r, i) => r.forEach((v, j) => { if (v && i < j) bonds.push({ a: i, b: j, order: v }); }));
     const formula = formulaOf(h);
     return { id: key, name: name || names.get(key) || 'Imported structure', knownName: names.has(key), notation: smiles(h), tags: tagsFor(h), atoms: h.atoms, bonds, hydrogens: h.atoms.map((e, i) => VAL[e] - used(h, i)), formula, metadata: parseFormula(formula, { enumeration: false }), stability: stabilityFor(h) };

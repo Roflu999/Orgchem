@@ -123,7 +123,37 @@
     points.forEach(p => ['x', 'y', 'z'].forEach((k, i) => { p[k] -= center[i]; }));
     return { atoms: points, bonds: flat.bonds };
   }
-  const api = { layout2D, layout3D };
+  // Choose a camera pose, never a new conformer. Penalize bonds seen end-on
+  // and overlapping atom silhouettes; give the heavy-atom backbone priority.
+  function openingPose({ atoms, bonds }) {
+    const pairs = [];
+    function add(i, j, clearance, weight) {
+      const a = atoms[i], b = atoms[j];
+      pairs.push([a.x - b.x, a.y - b.y, a.z - b.z, clearance * clearance, weight]);
+    }
+    for (const { a, b } of bonds) {
+      const heavy = atoms[a].e !== 'H' && atoms[b].e !== 'H';
+      add(a, b, heavy ? 1.2 : 0.78, heavy ? 5 : 1);
+    }
+    // Keep camera setup linear for larger imports.
+    if (atoms.length <= 100) for (let i = 0; i < atoms.length; i++) for (let j = 0; j < i; j++) {
+      const heavy = atoms[i].e !== 'H' && atoms[j].e !== 'H';
+      add(i, j, heavy ? 0.95 : 0.64, heavy ? 3 : 1);
+    }
+    let best = Infinity, pose;
+    for (const pitch of [18, -18, 40, -40, 68]) for (const yaw of [-15, 20, -45, 45, 80]) {
+      const x = pitch * Math.PI / 180, y = yaw * Math.PI / 180;
+      const cx = Math.cos(x), sx = Math.sin(x), cy = Math.cos(y), sy = Math.sin(y);
+      let score = 0;
+      for (const [dx, dy, dz, clearance2, weight] of pairs) {
+        const u = cy * dx + sy * dz, v = cx * dy - sx * (-sy * dx + cy * dz);
+        score += weight * Math.max(0, 1 - (u*u + v*v) / clearance2) ** 2;
+      }
+      if (score < best) { best = score; pose = [pitch, yaw]; }
+    }
+    return pose;
+  }
+  const api = { layout2D, layout3D, openingPose };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.MoleculeGeometry = api;
 })(typeof self !== 'undefined' ? self : globalThis);

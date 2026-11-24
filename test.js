@@ -103,6 +103,15 @@ test('triple-bond centers are linear in 2D and approximate 3D coordinates are fi
   const space=G.layout3D(iso);same(space.atoms.length,10);assert(space.atoms.every(a=>[a.x,a.y,a.z].every(Number.isFinite)));
   const xyz=F.writeXYZ(iso,space);same(Number(xyz.split('\n')[0]),10);
 });
+test('opening pose separates an end-on bond without changing the conformer or bond order',()=>{
+  const g={atoms:[{e:'C',x:0,y:0,z:4},{e:'N',x:0,y:0,z:5.2}],bonds:[{a:0,b:1,order:3}]};
+  const before=JSON.stringify(g),pose=G.openingPose(g),[x,y]=pose.map(a=>a*Math.PI/180);
+  // After yaw about Y then pitch about X, measure the visible fraction of the bond.
+  assert(Math.hypot(Math.sin(y),Math.sin(x)*Math.cos(y))>.95);
+  const shifted={...g,atoms:g.atoms.map(a=>({...a,x:a.x-12,y:a.y+3,z:a.z+8}))};
+  assert.deepEqual(G.openingPose(shifted),pose);assert.deepEqual(G.openingPose(g),pose);
+  assert.equal(JSON.stringify(g),before);assert(G.openingPose({atoms:[g.atoms[0]],bonds:[]}).every(Number.isFinite));
+});
 test('app and worker scripts parse, and local script files exist',()=>{
   const html=fs.readFileSync(path.join(__dirname,'bond-atlas.html'),'utf8');
   const inline=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(s=>s.trim());

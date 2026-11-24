@@ -28,7 +28,7 @@ The pinned 3Dmol.js renderer and all interface fonts—including Latin, Arabic a
 
 The language selector supports **English, Español, Français, 简体中文, العربية, and Deutsch**. Arabic uses right-to-left interface layout while molecular drawings, atom maps, formulas, SMILES and coordinate data retain their scientific orientation. Language changes update labels in place: they do not regenerate molecules, change the selected conformer, cancel jobs, reset the camera or discard builder history.
 
-**Display & accessibility** offers system/light/dark appearance, larger text, higher contrast and reduced motion. The OS reduced-motion preference is respected too, including automatic 3D rotation. Only these per-browser preferences are stored; molecular drafts are not autosaved.
+**Display & accessibility** offers system/light/dark appearance, larger text, higher contrast and reduced motion. The OS reduced-motion preference is respected too, including automatic 3D rotation. Sketches are not saved by default. The 2D simulator offers a separate, opt-in local recovery copy.
 
 - Use the skip link or **Go to molecule** to move into the workspace/viewer.
 - Focus a 3D model: arrow keys rotate, `+` / `−` zoom, and `Home` resets. Visible zoom buttons are also provided; Tab leaves the model normally.
@@ -62,7 +62,7 @@ Methods, energy units, relative energies, convergence, seed and warnings remain 
 
 Switch the selected state among **3D model** (ball & stick), **2D structure** (skeletal), **All atoms** (displayed), **Condensed**, **Formula**, **Fischer**, and **Newman**.
 
-- **2D:** RDKit stereo-aware depictions retain wedge/hash information. Displayed views include hydrogens.
+- **2D:** The skeletal view uses line-angle notation and RDKit stereo-aware depictions. Try **cis-But-2-ene (Z)** and **trans-But-2-ene (E)** under **Stereo & conformers**. For four different substituents, use E/Z rather than cis/trans. An unassigned alkene is not given a configuration just because of how it was sketched. The displayed view includes hydrogens.
 - **Fischer:** mapped local views preserve the selected configuration. Suitable simple acyclic chains support multi-center projections. Horizontal bonds point toward the viewer, vertical bonds away. Local layouts prefer a vertical carbon backbone and recognizable labels such as COOH and OH while re-verifying parity. A configuration inversion must select a different state rather than silently redrawing the same one.
 - **Newman:** front/rear groups and the measured dihedral derive from the selected conformer. The advanced projection controls can apply a constrained dihedral to an eligible bond and select the new checked conformer. Native JSON and coordinate-only builder edits retain validated torsion settings and parent linkage while that parent remains in the ensemble. Ring, terminal, aromatic and conjugated bonds cannot be arbitrarily twisted by that operation.
 - **Condensed:** hydrogens are grouped with bonded atoms; ring/multifragment cases that would be misleading remain in structural views.
@@ -72,13 +72,23 @@ Legacy offline examples remain available and are explicitly schematic, not assig
 
 ## Molecule builder
 
-**Build a molecule** opens a drag-and-drop sketchpad with single/double/triple bonds, benzene stamps, moving, deletion, Undo/Redo and explicit H. Click an element then tap to place/replace, or drag it from the palette. Choose a bond and drag between two atoms or tap both. Move mode drags atoms; dragging a bond moves both ends.
+For a ten-minute student lab and a repeatable visual review, see [Student walkthrough](STUDENT_WALKTHROUGH.md). The simulator’s **Predict & check** questions connect editing, 3D measurements, and stereochemistry.
+
+**2D simulator** opens a drag-and-drop sketchpad with single/double/triple bonds, benzene stamps, moving, deletion, Undo/Redo and explicit H. Click an element then tap to place/replace, or drag it from the palette. Choose a bond and drag between two atoms or tap both. Move mode drags atoms; dragging a bond moves both ends.
+
+Under **Move tool · 2D angles**, choose **Free** for arbitrary angles or **Idealized chain ends** for conventional line-angle drawings. The latter snaps an eligible terminal bond at a two-bond carbon to a 120° zigzag or a linear 180° arrangement. Rings and junctions are not forced into these angles. To find an angle for a specific 3D shape, measure it in a conformer instead.
+
+Choose **Elastic drag** and pull an atom (or focus it and press an arrow key) to see bonded neighbors follow. The springs use the drawing’s bond lengths; this is a layout simulation, not a molecular-energy calculation. **Move** still repositions just the selected atom or bond.
+
+Use **View in 3D** to preview the selected structure, then **Edit in 2D** to return to your drawing and Undo history. For a different selected model, **Edit in 2D** opens its corresponding sketch instead. Toolkit structures reuse supplied coordinates or request one conformer when eligible; unassigned stereochemistry is not guessed.
+
+On wider screens, **Side by side** docks the viewer beside the sketch. Pick an atom with the Move tool to highlight its counterpart, or select atoms in the model. Two picks give the distance; three give the angle at the second atom. These values use model coordinates, not distances on the screen. The inspector identifies whether the source is a conformer or an illustrative offline model. Hydrogens added only for 3D have no sketch counterpart. After editing, **Update preview** reconnects the panes; the previous model cannot be measured while out of date.
 
 The default neutral C/H/N/O/halogen editor remains usable offline. **More elements** / toolkit mode supports periodic-table symbols, isotopes and signed formal charges with RDKit-authoritative valence validation. Imported v3 structures retain their source record, atom/bond IDs and assigned stereochemistry. Position-only edits do not change configuration; chemical neighborhood changes explicitly invalidate affected assignments and stale conformers, with warnings. Old asynchronous responses cannot overwrite a newer draft.
 
 Disconnected legacy drawings are separate scene structures. Imported salts/multifragment toolkit molecules stay grouped as one chemical record. Arbitrary interfragment positioning is not an optimized molecular assembly.
 
-Drafts stay in memory across workspace switches, not across a reload. Export to save chemistry and conformers. **Ideal bond angles** is a legacy 2D layout operation; toolkit depictions and generated conformers use their own authoritative geometry. A flat sp³ zigzag is a projection, not a literal 109.5° tetrahedron.
+Drafts stay in memory across workspace switches. Enable draft recovery to keep a local copy, including unfinished drawings. On reopening the simulator, choose **Restore draft** or discard the copy; turning recovery off removes it. Export a file for long-term storage or sharing. **Ideal bond angles** is a legacy 2D layout operation; toolkit depictions and generated conformers use their own authoritative geometry. A flat sp³ zigzag is a projection, not a literal 109.5° tetrahedron.
 
 ## Reading an unfamiliar structure
 

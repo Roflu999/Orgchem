@@ -52,7 +52,7 @@ function bounds(d) {
 const ethanol = () => build(['C', 'C', 'O'], [[0, 1, 1], [1, 2, 1]]);
 
 test('CommonJS exports and fresh empty drafts', () => {
-  assert.deepEqual(Object.keys(S).sort(), ['empty', 'addAtom', 'moveAtom', 'setElement', 'setCharge', 'setBond', 'removeAtom', 'removeBond', 'fromStructure', 'analyze', 'validate', 'checked', 'toAdvanced', 'chemicalSignature', 'VAL', 'PERIODIC'].sort());
+  assert.deepEqual(Object.keys(S).sort(), ['empty', 'addAtom', 'moveAtom', 'elasticDrag', 'setElement', 'setCharge', 'setBond', 'removeAtom', 'removeBond', 'fromStructure', 'analyze', 'validate', 'checked', 'toAdvanced', 'chemicalSignature', 'VAL', 'PERIODIC'].sort());
   assert.equal(globalThis.MoleculeSketcher, S);
   const a = S.empty(), b = S.empty();
   assert.deepEqual(a, { atoms: [], bonds: [] });

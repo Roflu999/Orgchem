@@ -15,6 +15,9 @@
   const examples = {
     lactic: [()=>tr("stereo.exampleLactic",'Lactic acid · unspecified center'), 'CC(O)C(=O)O'],
     butene: [()=>tr("stereo.exampleButene",'But-2-ene · E/Z possibilities'), 'CC=CC'],
+    cis: [()=>tr('stereo.cisButene','cis-But-2-ene (Z)'), 'C/C=C\\C'],
+    trans: [()=>tr('stereo.transButene','trans-But-2-ene (E)'), 'C/C=C/C'],
+    substituted: [()=>tr('stereo.priorityAlkene','Four different substituents · use E/Z'), 'F/C(Cl)=C(/Br)I'],
     diol: [()=>tr("stereo.exampleDiol",'Butane-2,3-diol · including meso possibilities'), 'CC(O)C(O)C'],
     chiral: [()=>tr("stereo.exampleChiral",'Assigned lactic acid · chiral input'), 'C[C@H](O)C(=O)O']
   };
@@ -65,6 +68,7 @@
       <div class="stereo-section-heading"><h3 id="stereo-results-title" class="stereo-step-heading"><span class="stereo-step">2</span> <span data-i18n="stereo.compareTitle">Compare stereoisomers</span></h3><p id="stereo-summary" class="stereo-muted"></p></div>
       <ul id="stereo-warnings" class="stereo-warnings" hidden></ul>
       <p class="stereo-muted" data-i18n="stereo.compareHelp">Select a variant for the main viewer. Check up to two to compare their assignments side by side. Atom numbers follow the input structure, not IUPAC locants.</p>
+      <p class="stereo-muted" data-i18n="stereo.skeletalKey">Read the higher-priority group at each end of C=C: same side is Z; opposite sides is E. A crossed double bond means the configuration is unspecified; it does not imply a mixture.</p>
       <div id="stereo-variants" class="stereo-variants"></div>
       <section class="stereo-comparison" id="stereo-comparison" data-i18n-aria-label="stereo.compareTitle" aria-label="Compare stereoisomers" hidden><h3 data-i18n="stereo.compareTitle">Compare stereoisomers</h3><div id="stereo-compare-panels" class="stereo-compare-panels"></div><p class="stereo-muted" id="stereo-relationship" role="status"></p><button type="button" class="stereo-button" id="stereo-together" data-i18n="stereo.showPair">Show pair together in 3D</button><p class="stereo-muted" data-i18n="stereo.pairHelp">The main viewer’s Together control can return to the full set. A comparison does not imply an energy ranking.</p></section>
     </section>
@@ -166,7 +170,7 @@
   function stereoLabel(m) {
     const entries = [];
     (m.stereo?.centers || []).forEach(c => entries.push(atomLabel(m, c.atom, c.atomId) + ': ' + (c.cip || (c.specified ? tr("stereo.assignedUnknown",'assigned (descriptor unavailable)') : tr("stereo.unspecified",'unspecified')))));
-    (m.stereo?.bonds || []).forEach(b => entries.push(atomLabel(m, b.a) + '–' + atomLabel(m, b.b) + ': ' + (b.descriptor || (b.specified ? tr("stereo.assignedUnknown",'assigned (descriptor unavailable)') : tr("stereo.unspecified",'unspecified')))));
+    (m.stereo?.bonds || []).forEach(b => entries.push(atomLabel(m, b.a) + '–' + atomLabel(m, b.b) + ': ' + window.MoleculeRecords.bondStereoLabel(b,tr('stereo.unspecified','unspecified'),tr('stereo.assignedUnknown','assigned (descriptor unavailable)'))));
     return entries.join(' · ') || tr("stereo.noAssignments",'No R/S or E/Z assignments reported');
   }
   function option(label,value) { const item=new Option('',value); ui(item,label); return item; }
