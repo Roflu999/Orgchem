@@ -1,0 +1,144 @@
+name: Local app verification
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: Python and JavaScript regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install explicit test dependencies in an isolated environment
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --no-input -r requirements-dev.txt
+      - name: Launcher and backend regressions
+        run: >-
+          .venv/bin/python -m unittest -v
+          backend.test_launcher backend.test_chemistry_service backend.test_api
+          backend.test_extras backend.test_jobs backend.test_composition
+      - name: JavaScript regressions (including localization)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in test.js test-*.js; do
+            node "$test"
+          done
+      - name: Validate the launcher against the installed runtime
+        run: python run_local.py --setup-only
+
+  portable-launcher:
+    name: Launcher controls (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Stdlib-only launcher tests (no chemistry/browser install)
+        run: python -m unittest -v backend.test_launcher
+      - name: Check launcher command-line help
+        run: python run_local.py --help
+
+  browser:
+    name: Sandboxed browser and localization
+    # Playwright supports 22.04; use it without changing AppArmor/userns policy.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Install explicit browser-test dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --no-input -r requirements-dev.txt
+          .venv/bin/python -m playwright install chromium
+      - name: Browser smoke, integration and UI/localization
+        shell: bash
+        run: |
+          .venv/bin/python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          # Every suite gets a separate app lifetime: production rate/queue limits stay intact.
+          # No sandbox-disabling flags, privileged browser, or host-security changes.
+          url = "http://127.0.0.1:8765"
+          Path("/tmp/bond-atlas-browser").mkdir(parents=True, exist_ok=True)
+          for suite in ("browser_smoke.py", "browser_integration.py", "browser_ui.py"):
+              print(f"Running {suite} against a fresh local server", flush=True)
+              server = subprocess.Popen([
+                  sys.executable, "serve.py", "--host", "127.0.0.1", "--port", "8765"
+              ])
+              try:
+                  deadline = time.monotonic() + 30
+                  while True:
+                      if server.poll() is not None:
+                          raise RuntimeError("Local test server exited before becoming ready")
+                      try:
+                          with urllib.request.urlopen(url + "/api/v1/health", timeout=2) as response:
+                              if response.status == 200:
+                                  break
+                      except (urllib.error.URLError, TimeoutError):
+                          pass
+                      if time.monotonic() >= deadline:
+                          raise RuntimeError("Local test server did not become ready in 30 seconds")
+                      time.sleep(0.25)
+                  subprocess.run([sys.executable, suite, "--url", url], check=True, timeout=360)
+              finally:
+                  # Clean up only the process this suite created, even on test failure.
+                  if server.poll() is None:
+                      server.terminate()
+                  try:
+                      server.wait(timeout=10)
+                  except subprocess.TimeoutExpired:
+                      server.kill()
+                      server.wait()
+          PY

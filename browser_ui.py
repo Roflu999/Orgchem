@@ -1,0 +1,233 @@
+"""Keyboard, preferences, locale/RTL and chemistry-state integration checks.
+
+These automated checks supplement, not certify, manual assistive-technology testing.
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+from urllib.parse import urlparse
+from playwright.sync_api import sync_playwright, expect
+
+LOCALES = ('en', 'es', 'fr', 'zh-Hans', 'ar', 'de')
+
+
+def snapshot(page):
+    return page.evaluate('''() => ({
+      selected:BondAtlas.state.selected?.id,
+      record:JSON.stringify(BondAtlas.state.result?.isomers),
+      mode:BondAtlas.state.mode,together:BondAtlas.state.together,
+      camera:BondAtlas.state.viewer?.getView(),
+      draft:JSON.stringify(MoleculeBuilder.getDraft())
+    })''')
+
+
+def semantics(page):
+    return page.evaluate('''() => {
+      const visible = element => {
+        if(element.checkVisibility && !element.checkVisibility({checkVisibilityCSS:true})) return false;
+        for(let parent=element.parentElement;parent;parent=parent.parentElement) {
+          if(parent.tagName==='DETAILS' && !parent.open && !parent.querySelector(':scope > summary')?.contains(element)) return false;
+        }
+        return !!(element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
+      };
+      const controls = [...document.querySelectorAll('input,select,textarea')].filter(e=>visible(e) && e.type !== 'hidden');
+      const unnamed = controls.filter(e=>!e.labels?.length && !e.getAttribute('aria-label') && !e.getAttribute('aria-labelledby'));
+      const buttons = [...document.querySelectorAll('button')].filter(visible).filter(e=>!e.innerText.trim() && !e.getAttribute('aria-label') && !e.getAttribute('aria-labelledby') && !e.title);
+      const ids = [...document.querySelectorAll('[id]')].map(e=>e.id);
+      const missing = [...document.querySelectorAll('[aria-labelledby],[aria-describedby],[aria-controls]')].flatMap(e=>['aria-labelledby','aria-describedby','aria-controls'].flatMap(a=>(e.getAttribute(a)||'').split(/\\s+/).filter(id=>id&&!document.getElementById(id)).map(id=>e.id+':'+id)));
+      return {unnamed:unnamed.map(e=>e.id),buttons:buttons.map(e=>e.id),duplicates:ids.filter((id,i)=>ids.indexOf(id)!==i),missing,main:document.querySelectorAll('main').length,overflow:document.documentElement.scrollWidth>innerWidth};
+    }''')
+
+
+def choose_language(page, locale):
+    page.locator('#language-select').select_option(locale)
+    expect(page.locator('html')).to_have_attribute('lang', locale)
+    expect(page.locator('html')).to_have_attribute('dir', 'rtl' if locale == 'ar' else 'ltr')
+    page.evaluate('async () => { await document.fonts.ready; await new Promise(resolve=>requestAnimationFrame(resolve)); }')
+
+
+def preferences(page, **values):
+    page.locator('#preferences-button').click()
+    expect(page.locator('#preferences-dialog')).to_be_visible()
+    for name, value in values.items():
+        locator = page.locator({'theme':'#preference-theme','text':'#preference-text-size','contrast':'#preference-contrast','motion':'#preference-motion'}[name])
+        if isinstance(value, bool):
+            locator.set_checked(value)
+        else:
+            locator.select_option(value)
+    page.locator('#close-preferences').click()
+    expect(page.locator('#preferences-dialog')).to_be_hidden()
+    expect(page.locator('#preferences-button')).to_be_focused()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--url', default='http://127.0.0.1:8000')
+    parser.add_argument('--browser-library-root')
+    parser.add_argument('--disable-browser-sandbox', action='store_true')
+    parser.add_argument('--screenshots', default='/tmp/bond-atlas-ui')
+    parser.add_argument('--capture',action='store_true',help='Capture optional full-page visual references; functional checks do not require compositor snapshots.')
+    args = parser.parse_args()
+    if args.disable_browser_sandbox and urlparse(args.url).hostname not in ('localhost','127.0.0.1','::1'):
+        raise SystemExit('Unsandboxed test browsers are restricted to the authorized local test site.')
+    out = Path(args.screenshots)
+    out.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    if args.browser_library_root:
+        root = Path(args.browser_library_root)
+        env['LD_LIBRARY_PATH'] = str(root/'usr/lib') + ':' + str(root/'lib')
+        env['FONTCONFIG_FILE'] = '/tmp/bond-atlas-browser/fontconfig.xml'
+    errors, jobs = [], []
+    with sync_playwright() as p:
+        browser = p.chromium.launch(chromium_sandbox=not args.disable_browser_sandbox,args=['--disable-dev-shm-usage'],env=env)
+        context = browser.new_context(viewport={'width':1440,'height':1050}, color_scheme='light')
+        page = context.new_page()
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.on('console',lambda message: errors.append(message.text) if 'framebuffer is incomplete' in message.text.lower() or 'invalid_framebuffer' in message.text.lower() else None)
+        page.on('request', lambda request: jobs.append(request.url) if request.method=='POST' and '/api/v1/jobs' in request.url else None)
+        try:
+            page.goto(args.url,wait_until='domcontentloaded',timeout=30000)
+            expect(page.locator('#language-select option')).to_have_count(6)
+            expect(page.locator('.stereo-variant')).to_have_count(2,timeout=20000)
+            expect(page.locator('#stereo-make-conformers')).to_be_enabled()
+            page.locator('#stereo-num-confs').fill('3')
+            page.locator('#stereo-make-conformers').click()
+            expect(page.locator('#stereo-status')).to_contain_text('Conformer sampling completed',timeout=30000)
+            page.locator('#together-button').click()
+            page.wait_for_function('() => BondAtlas.state.together && !BondAtlas.state.pendingScene',timeout=30000)
+            page.locator('#model3d').focus()
+            before_camera=page.evaluate('BondAtlas.state.viewer.getView()')
+            page.keyboard.press('ArrowRight')
+            assert page.evaluate('BondAtlas.state.viewer.getView()') != before_camera
+            page.keyboard.press('+')
+            resize_stats=page.evaluate('''() => {
+              const viewer=BondAtlas.state.viewer;viewer.resize();
+              const before=ViewerLifecycle.getStats(viewer),renderer=viewer.getRenderer();
+              for(let i=0;i<40;i++)renderer.setSize(viewer.getWidth(),viewer.getHeight());
+              const after=ViewerLifecycle.getStats(viewer);
+              return {before,after};
+            }''')
+            assert resize_stats['after']['applied']==resize_stats['before']['applied'],resize_stats
+            assert resize_stats['after']['skipped']-resize_stats['before']['skipped']>=40,resize_stats
+            print('PASS repeated same-size resizes reuse live WebGL framebuffer resources',flush=True)
+            original = snapshot(page)
+            job_count = len(jobs)
+            for locale in LOCALES:
+                choose_language(page,locale)
+                assert snapshot(page) == original, (locale,snapshot(page),original)
+                assert len(jobs)==job_count, 'Changing language submitted a chemistry job'
+                assert page.evaluate('getComputedStyle(document.querySelector("#model3d")).direction') == 'ltr'
+                checks=semantics(page)
+                assert checks=={'unnamed':[],'buttons':[],'duplicates':[],'missing':[],'main':1,'overflow':False}, (locale,checks)
+                assert not page.evaluate('''() => /\\b(?:shell|prefs|viewer|explorer)\\.[A-Za-z]/.test(document.body.innerText)'''), locale
+                if args.capture: page.screenshot(path=str(out/(locale+'-desktop.png')),full_page=True,timeout=10000)
+            loaded_fonts=page.evaluate('Array.from(document.fonts).filter(face=>face.status==="loaded").map(face=>face.family.replaceAll(String.fromCharCode(34),""))')
+            assert 'Atlas Arabic' in loaded_fonts and 'Atlas Han' in loaded_fonts, loaded_fonts
+            print('PASS six locales preserve molecules, camera and Together scene without submitting jobs',flush=True)
+            page.locator('#show-explorer').click()
+            page.locator('#show-stereo').click()
+            page.evaluate('async () => { await new Promise(resolve=>requestAnimationFrame(resolve)); await new Promise(resolve=>requestAnimationFrame(resolve)); }')
+            assert snapshot(page)==original,'Workspace navigation changed the selected scene or custom camera'
+            print('PASS workspace navigation preserves the custom camera and Together scene',flush=True)
+            # RTL changes visual tab navigation, never the molecule/canvas coordinate system.
+            choose_language(page,'ar')
+            page.locator('#tab-3d').focus();page.keyboard.press('ArrowLeft')
+            expect(page.locator('#tab-skeletal')).to_be_focused()
+            page.keyboard.press('Home');expect(page.locator('#tab-3d')).to_be_focused()
+            choose_language(page,'en')
+            page.locator('#rotate-button').click()
+            assert page.evaluate('BondAtlas.state.rotating')
+            preferences(page, theme='dark',contrast=True,motion=True,text='xlarge')
+            assert not page.evaluate('BondAtlas.state.rotating')
+            expect(page.locator('#rotate-button')).to_be_disabled()
+            assert page.evaluate('getComputedStyle(document.querySelector(".spinner")).animationName')=='none'
+            assert page.evaluate('parseFloat(getComputedStyle(document.documentElement).fontSize)')>=20
+            preferences(page,theme='light',contrast=False,text='normal')
+            page.locator('#preferences-button').click()
+            for _ in range(12):
+                page.keyboard.press('Tab')
+                assert page.evaluate('!!document.activeElement.closest("#preferences-dialog")'),'Dialog focus escaped'
+            page.keyboard.press('Escape')
+            expect(page.locator('#preferences-dialog')).to_be_hidden()
+            expect(page.locator('#preferences-button')).to_be_focused()
+            stored=page.evaluate('JSON.parse(localStorage.getItem("bond-atlas.preferences.v1"))')
+            assert set(stored)=={'language','theme','textSize','contrast','reduceMotion'},stored
+            print('PASS RTL tabs, keyboard camera, dialog focus, larger text, contrast and reduced motion',flush=True)
+            # Delay an actual conformer result, switch languages, then permit its
+            # original calculation to commit without cancellation/reinitialization.
+            page.evaluate('''() => {
+              window.__originalUIJob=ChemistryClient.job;
+              ChemistryClient.job=async function(operation,payload,options){
+                const result=await window.__originalUIJob(operation,payload,options);
+                if(operation==='conformers') await new Promise(resolve=>window.__releaseUIJob=resolve);
+                return result;
+              };
+            }''')
+            page.locator('#stereo-num-confs').fill('2');page.locator('#stereo-make-conformers').click()
+            expect(page.locator('#stereo-explorer')).to_have_attribute('aria-busy','true')
+            page.wait_for_function('() => typeof window.__releaseUIJob === "function"',timeout=30000)
+            pending_record=page.evaluate('JSON.stringify(BondAtlas.state.selected)')
+            choose_language(page,'es')
+            assert page.evaluate('JSON.stringify(BondAtlas.state.selected)')==pending_record
+            expect(page.locator('#stereo-explorer')).to_have_attribute('aria-busy','true')
+            page.evaluate('window.__releaseUIJob()')
+            expect(page.locator('#stereo-explorer')).to_have_attribute('aria-busy','false',timeout=30000)
+            assert not page.locator('#stereo-error').is_visible()
+            page.evaluate('() => { ChemistryClient.job=window.__originalUIJob; }')
+            choose_language(page,'en')
+            print('PASS a real pending chemistry result survives locale switching and commits normally',flush=True)
+            # The same selected record survives locale changes while editing a draft.
+            page.locator('#edit-in-builder').click()
+            expect(page.locator('#builder-open-viewer')).to_be_enabled(timeout=20000)
+            atom=page.locator('#builder-canvas [data-atom="0"]')
+            atom.press('ArrowRight')
+            draft=page.evaluate('JSON.stringify(MoleculeBuilder.getDraft())')
+            page.evaluate('window.__focusedAtom=document.activeElement; AtlasPreferences.set("language","fr")')
+            assert page.evaluate('document.activeElement===window.__focusedAtom')
+            assert page.evaluate('JSON.stringify(MoleculeBuilder.getDraft())')==draft
+            expect(page.locator('#builder-undo')).to_be_enabled()
+            page.locator('#builder-undo').click()
+            assert page.evaluate('JSON.stringify(MoleculeBuilder.getDraft())')!=draft
+            print('PASS locale switching retains builder draft, focus, selection and Undo',flush=True)
+            page.locator('#show-stereo').click()
+            page.set_viewport_size({'width':390,'height':844})
+            for locale in LOCALES:
+                choose_language(page,locale)
+                preferences(page,theme='dark' if locale in ('ar','de','zh-Hans') else 'light',text='large')
+                checks=semantics(page)
+                assert not checks['overflow'],(locale,checks)
+                if args.capture: page.screenshot(path=str(out/(locale+'-phone.png')),full_page=True,timeout=10000)
+            page.set_viewport_size({'width':720,'height':650})
+            preferences(page,text='xlarge',contrast=True)
+            assert not semantics(page)['overflow'],'200% viewport reflow with enlarged text overflowed'
+            print('PASS six phone locales, Arabic/CJK font loading and enlarged-text reflow',flush=True)
+            # Stored preferences, not chemistry, survive a new page in the same context.
+            persisted = context.new_page();persisted.goto(args.url,wait_until='domcontentloaded')
+            expect(persisted.locator('#language-select')).to_have_value('de')
+            expect(persisted.locator('html')).to_have_attribute('data-text-size','xlarge')
+            persisted.close()
+            blocked = browser.new_context(viewport={'width':390,'height':844})
+            blocked.add_init_script('Object.defineProperty(window,"localStorage",{get(){throw new Error("Blocked storage")}})')
+            blocked.route('**/*',lambda route:route.continue_() if route.request.url.startswith(args.url) else route.abort())
+            fallback=blocked.new_page();fallback.on('pageerror',lambda error:errors.append(str(error)))
+            fallback.goto(args.url,wait_until='domcontentloaded')
+            expect(fallback.locator('#language-select')).to_have_value('en')
+            fallback.locator('#language-select').select_option('ar')
+            expect(fallback.locator('html')).to_have_attribute('dir','rtl')
+            fallback.evaluate('async () => { await document.fonts.ready; }')
+            assert fallback.evaluate('Array.from(document.fonts).some(face=>face.status==="loaded" && face.family.includes("Atlas Arabic"))')
+            blocked.close()
+            assert not errors,errors
+            print('PASS preference persistence and unavailable-storage fallback; no page errors',flush=True)
+        except Exception:
+            print('UI diagnostics:',json.dumps({'errors':errors,'semantics':semantics(page)},ensure_ascii=False),flush=True)
+            page.screenshot(path=str(out/'ui-failure.png'),full_page=True)
+            raise
+        finally:
+            context.close();browser.close()
+    print('PASS UI accessibility/localization integration checks',flush=True)
+
+
+if __name__=='__main__':
+    main()
