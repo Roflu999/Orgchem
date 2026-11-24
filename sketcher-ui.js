@@ -99,6 +99,7 @@
   }
   function attempt(action) { try { const result = action(); result?.catch?.(e => message(()=>detail(e.message))); return result; } catch (e) { message(()=>detail(e.message)); } }
   function setTool(next, value) {
+    if (next !== tool && (next === 'select' || tool === 'select')) selection = null;
     tool = next; if (next === 'element') element = value; if (next === 'bond') order = Number(value);
     anchor = null; pendingLine = null; message(); render();
   }
@@ -130,6 +131,12 @@
   const bondOrder=n=>tr(n===1?'builder.single':n===2?'builder.double':'builder.triple',n===1?'Single':n===2?'Double':'Triple');
   const elementName=e=>elements[e]?tr('builder.element.'+e,elements[e]):e;
   function drawingCounts(){const a=draft.atoms.length,b=draft.bonds.length;const counts=I?.locale&&I.locale!=='en'?tr('builder.counts','{atoms} drawn atoms · {bonds} bonds',{atoms:a,bonds:b}):a+' drawn atom'+(a===1?'':'s')+' · '+b+' bond'+(b===1?'':'s');return sample?tr('builder.examplePrefix','Example · {detail}',{detail:counts}):counts;}
+  function getDeskNotation() {
+    if (!draft.atoms.length) return '';
+    if (!scene.valid || !scene.components.length) return null;
+    const parts = scene.components.map(c => c.valid && c.structure?.notation);
+    return parts.every(s => typeof s === 'string' && s) ? parts.join('.') : null;
+  }
   function updateIdentity() {
     if (selection?.kind === 'atom') {
       const index=scene.components.findIndex(c=>c.indices.includes(selection.i));
@@ -160,13 +167,17 @@
     $('builder-open-viewer').disabled=!valid||!!analysis.busy;
     $('builder-advanced').setAttribute('aria-pressed', String(advanced));
     $('builder-advanced').disabled=advanced;
+    window.ModelDesk?.updateApply?.();
   }
   function updateSelection() {
     const isAtom=selection?.kind==='atom' && !!draft.atoms[selection.i];
     const bond=selection?.kind==='bond'?draft.bonds.find(b=>b.a===selection.a&&b.b===selection.b):null;
     $('builder-angle-note').hidden=!isAtom;
     $('builder-angle-mode').disabled=tool!=='move';
-    $('builder-atom-controls').hidden=!isAtom; $('builder-bond-controls').hidden=!bond; $('builder-delete').hidden=!isAtom&&!bond;
+    $('builder-atom-controls').hidden=!isAtom; $('builder-bond-controls').hidden=!bond;
+    const batchCount=selection?.kind==='atoms' ? selection.indices.length : 0;
+    $('builder-delete').hidden=tool!=='select'&&!isAtom&&!bond;
+    $('builder-delete').disabled=!batchCount&&!isAtom&&!bond;
     if (isAtom) {
       const a=draft.atoms[selection.i],h=analysis.hydrogens?.[selection.i]||0;
       ui($('builder-selection-label'),()=>tr('builder.atomSelection','Atom {number} · {element}{hydrogens}',{number:selection.i+1,element:(a.isotope?superscript(a.isotope):'')+elementName(a.e)+chargeLabel(a.charge),hydrogens:' · '+(a.e==='H'?tr('builder.explicitH','explicit hydrogen'):isAdvanced()&&!analysis.valid?tr('builder.pendingH','H count pending'):tr('builder.autoH','{count} automatic H',{count:h}))}));
@@ -180,7 +191,8 @@
     } else if (bond) {
       ui($('builder-selection-label'),()=>tr('builder.bondSelection','Bond · atom {a} to atom {b}',{a:bond.a+1,b:bond.b+1}));
       $('builder-change-order').value=String(bond.order);
-    } else ui($('builder-selection-label'),()=>anchor!==null?tr("builder.secondAtom",'Choose a second atom to finish the bond.'):tr("builder.selectHint",'Choose Move, then select an atom or bond.'));
+    } else if(tool==='select') ui($('builder-selection-label'),()=>tr('builder.selectedCount','Selected atoms: {count}',{count:batchCount}));
+    else ui($('builder-selection-label'),()=>anchor!==null?tr("builder.secondAtom",'Choose a second atom to finish the bond.'):tr("builder.selectHint",'Choose Move, then select an atom or bond.'));
   }
   function updateToolbar() {
     document.querySelectorAll('[data-sketch-element]').forEach(b=>b.setAttribute('aria-pressed',String(tool==='element'&&b.dataset.sketchElement===element)));
@@ -188,11 +200,12 @@
     $('builder-ring').setAttribute('aria-pressed',String(tool==='ring'));
     $('builder-move').setAttribute('aria-pressed',String(tool==='move')); $('builder-erase').setAttribute('aria-pressed',String(tool==='erase'));
     $('builder-elastic').setAttribute('aria-pressed',String(tool==='elastic'));
-    const hints=()=>({elastic:tr('sim.hint','Drag an atom or use arrow keys. Bonded atoms follow like springs. This changes the drawing, not molecular energy.'),ring:tr("builder.hintRing",'Benzene ring · tap empty space to place a regular 120° hexagon'),move:tr("builder.hintMove",'Move · drag an atom, or drag a bond to move both ends'),element:tr('builder.hintElement','{element} · tap empty space to add; tap an atom to replace',{element}),bond:tr('builder.hintBond','{order} bond · drag between atoms, or tap two atoms',{order:bondOrder(order)}),erase:tr("builder.hintErase",'Erase · tap an atom or bond to remove it')});
+    $('builder-select-atoms').setAttribute('aria-pressed',String(tool==='select'));
+    const hints=()=>({select:tr('builder.batchHint','Tap atoms or use Tab and Space to select or deselect them. Then choose Delete selection.'),elastic:tr('sim.hint','Drag an atom or use arrow keys. Bonded atoms follow like springs. This changes the drawing, not molecular energy.'),ring:tr("builder.hintRing",'Benzene ring · tap empty space to place a regular 120° hexagon'),move:tr("builder.hintMove",'Move · drag an atom, or drag a bond to move both ends'),element:tr('builder.hintElement','{element} · tap empty space to add; tap an atom to replace',{element}),bond:tr('builder.hintBond','{order} bond · drag between atoms, or tap two atoms',{order:bondOrder(order)}),erase:tr("builder.hintErase",'Erase · tap an atom or bond to remove it')});
     ui($('builder-tool-hint'),()=>hints()[tool]); svg.dataset.tool=tool;
     $('builder-undo').disabled=!history.length; $('builder-redo').disabled=!future.length;
     $('builder-clear').disabled=!draft.atoms.length;
-    ui($('builder-counts'),()=>drawingCounts());
+    ui($('builder-counts'),()=>tool==='select'?tr('builder.selectedCount','Selected atoms: {count}',{count:selection?.indices?.length||0}):drawingCounts());
   }
   function atomDescription(a,i,h){return tr('builder.atomAria','Atom {number}, {element}{isotope}{charge}{hydrogens}',{number:i+1,element:elementName(a.e),isotope:a.isotope?tr('builder.isotopeSuffix',', isotope {value}',{value:a.isotope}):'',charge:a.charge?tr('builder.chargeSuffix',', formal charge {value}',{value:a.charge}):'',hydrogens:a.e!=='H'&&(!isAdvanced()||analysis.valid)?(!I||I.locale==='en'?', '+h+' automatic hydrogen'+(h===1?'':'s'):tr('builder.hydrogensSuffix',', {count} automatic hydrogens',{count:h})):''});}
   function renderDrawing() {
@@ -202,7 +215,7 @@
       const p=project(draft.atoms[b.a]), q=project(draft.atoms[b.b]), dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy)||1;
       const ux=dx/len,uy=dy/len,gap=Math.min(25,len*.3);
       const chosen=selection?.kind==='bond'&&selection.a===b.a&&selection.b===b.b;
-      const g=node('g',{class:'sketch-bond',role:'button',tabindex:'0','data-bond-a':b.a,'data-bond-b':b.b,'data-sketch-focus':'b'+b.a+'-'+b.b,'aria-pressed':chosen,'aria-label':()=>tr('builder.bondAria','{order} bond from atom {a} to {b}',{order:bondOrder(b.order),a:b.a+1,b:b.b+1})});
+      const g=node('g',{class:'sketch-bond',role:'button',tabindex:tool==='select'?'-1':'0','aria-disabled':tool==='select','data-bond-a':b.a,'data-bond-b':b.b,'data-sketch-focus':'b'+b.a+'-'+b.b,'aria-pressed':chosen,'aria-label':()=>tr('builder.bondAria','{order} bond from atom {a} to {b}',{order:bondOrder(b.order),a:b.a+1,b:b.b+1})});
       const offsets=b.order===1?[0]:b.order===2?[-3,3]:[-6,0,6];
       offsets.forEach(o=>g.append(node('line',{x1:p.x+ux*gap-uy*o,y1:p.y+uy*gap+ux*o,x2:q.x-ux*gap-uy*o,y2:q.y-uy*gap+ux*o,class:'sketch-bond-line'})));
       g.append(node('line',{x1:p.x,y1:p.y,x2:q.x,y2:q.y,class:'sketch-bond-hit'})); svg.append(g);
@@ -213,7 +226,7 @@
     const highlighted=inspectedIndices();
     draft.atoms.forEach((a,i)=>{
       const p=project(a),h=analysis.hydrogens?.[i]||0;
-      const g=node('g',{class:'sketch-atom',role:'button',tabindex:'0','data-atom':i,'data-sketch-focus':'a'+i,'aria-pressed':selection?.kind==='atom'&&selection.i===i||anchor===i,'aria-label':()=>atomDescription(a,i,h)});
+      const g=node('g',{class:'sketch-atom',role:'button',tabindex:'0','data-atom':i,'data-sketch-focus':'a'+i,'aria-pressed':selection?.kind==='atom'&&selection.i===i||selection?.kind==='atoms'&&selection.indices.includes(i)||anchor===i,'aria-label':()=>atomDescription(a,i,h)});
       g.style.setProperty('--element-color','var(--atom-'+a.e+', var(--text, #888))');
       g.append(node('circle',{cx:p.x,cy:p.y,r:23}));
       g.append(node('circle',{cx:p.x-15,cy:p.y-15,r:3,class:'sketch-element-dot'}));
@@ -305,11 +318,19 @@
     analysis=identify(); message(); fitDrawing(); render();
   }
   function deleteSelection() {
-    if(selection?.kind==='atom')apply(M.removeAtom(draft,selection.i),null);
+    if(selection?.kind==='atoms'&&selection.indices.length)apply(M.removeAtoms(draft,selection.indices),null);
+    else if(selection?.kind==='atom')apply(M.removeAtom(draft,selection.i),null);
     else if(selection?.kind==='bond')apply(M.removeBond(draft,selection.a,selection.b),null);
+    else return;
+    svg.focus({preventScroll:true});
   }
   function activateAtom(i) {
-    if(tool==='erase'){apply(M.removeAtom(draft,i),null);return;}
+    if(tool==='select'){
+      const indices=selection?.kind==='atoms'?selection.indices:[];
+      selection={kind:'atoms',indices:indices.includes(i)?indices.filter(j=>j!==i):[...indices,i]};
+      render();return;
+    }
+    if(tool==='erase'){selection={kind:'atom',i};deleteSelection();return;}
     if(tool==='element'){apply(M.setElement(draftForElement(element),i,element),{kind:'atom',i});return;}
     selection={kind:'atom',i};
     inspectSketchAtom(i);
@@ -320,7 +341,8 @@
     render();
   }
   function activateBond(a,b) {
-    if(tool==='erase'){apply(M.removeBond(draft,a,b),null);return;}
+    if(tool==='select')return;
+    if(tool==='erase'){selection={kind:'bond',a,b};deleteSelection();return;}
     if(tool==='bond')apply(M.setBond(draft,a,b,order),{kind:'bond',a,b});
     else {selection={kind:'bond',a,b};anchor=null;render();}
   }
@@ -479,7 +501,7 @@
       else if(g.bond)activateBond(g.bond.a,g.bond.b);
       else if(tool==='element')addAt(pointer(e));
       else if(tool==='ring')stampRing(pointer(e));
-      else {anchor=null;selection=null;render();}
+      else if(tool!=='select'){anchor=null;selection=null;render();}
     });
     // Always remove the preview even if a valence check rejected the bond.
     renderDrawing();
@@ -488,7 +510,7 @@
   svg.addEventListener('lostpointercapture',e=>{if(gesture?.id===e.pointerId)endGesture(e,true);});
   svg.addEventListener('keydown',e=>{
     const atom=e.target.closest('[data-atom]'),bond=e.target.closest('[data-bond-a]');
-    if(e.key==='Enter'||e.key===' '){e.preventDefault();attempt(()=>{
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();if(e.repeat)return;attempt(()=>{
       if(atom)activateAtom(Number(atom.dataset.atom));else if(bond)activateBond(Number(bond.dataset.bondA),Number(bond.dataset.bondB));
       else if(tool==='ring')stampRing({x:width/2,y:height/2});
       else if(tool==='element'){const p={x:width/2,y:height/2};if(nearestAtom(p)>=0){p.x+=70;p.y+=60;}addAt(p);}
@@ -499,10 +521,17 @@
     }
   });
   $('builder-panel').addEventListener('keydown',e=>{
-    if(e.target.closest('#builder-split-pane')||e.target.matches('input,select,textarea'))return;
+    if(gesture||paletteDrag||e.target.closest('#builder-split-pane')||e.target.matches('input,select,textarea')||e.target.isContentEditable)return;
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo(e.shiftKey);}
     else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();undo(true);}
-    else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();const a=e.target.closest('[data-atom]'),b=e.target.closest('[data-bond-a]');if(a)selection={kind:'atom',i:Number(a.dataset.atom)};else if(b)selection={kind:'bond',a:Number(b.dataset.bondA),b:Number(b.dataset.bondB)};attempt(deleteSelection);}
+    else if(e.key==='Delete'||e.key==='Backspace'){
+      e.preventDefault();if(e.repeat)return;
+      if(tool!=='select'){
+        const a=e.target.closest('[data-atom]'),b=e.target.closest('[data-bond-a]');
+        if(a)selection={kind:'atom',i:Number(a.dataset.atom)};else if(b)selection={kind:'bond',a:Number(b.dataset.bondA),b:Number(b.dataset.bondB)};
+      }
+      attempt(deleteSelection);
+    }
     else if(e.key==='Escape'){anchor=null;pendingLine=null;setTool('move');}
   });
   $('show-builder').addEventListener('click',()=>attempt(()=>showBuilder()));
@@ -511,6 +540,7 @@
   }
   $('show-explorer').addEventListener('click',()=>{leaveSimulator();showExplorer();});
   $('show-stereo').addEventListener('click',leaveSimulator);
+  $('show-models').addEventListener('click',leaveSimulator);
   $('edit-in-builder').addEventListener('click',()=>attempt(()=>{
     const selected=app.state.selected;
     if(!selected)return;
@@ -528,11 +558,12 @@
       preview={records:[selected],draft,links:new Map([[selected,{component:0,indices:draft.atoms.map((_,i)=>i)}]])};
     }
     const last=inspectedIndices().filter(Number.isInteger).at(-1);
-    if(Number.isInteger(last)){selection={kind:'atom',i:last};render();}
+    if(Number.isInteger(last)&&tool!=='select'){selection={kind:'atom',i:last};render();}
     svg.focus();
   }));
   $('builder-load-selected').addEventListener('click',()=>attempt(()=>{if(!app.state.selected)throw Error('Select a structure in the viewer first.');loadStructure(app.state.selected);}));
   $('builder-example').addEventListener('change',()=>{const name=$('builder-example').value;if(name)attempt(()=>loadStructure(Chem.resolveName(name),true));$('builder-example').value='';});
+  $('builder-select-atoms').addEventListener('click',()=>setTool('select'));
   $('builder-elastic').addEventListener('click',()=>setTool('elastic'));
   $('builder-move').addEventListener('click',()=>setTool('move'));$('builder-erase').addEventListener('click',()=>setTool('erase'));
   $('builder-fit').addEventListener('click',()=>{fitDrawing();renderDrawing();});
@@ -629,5 +660,5 @@
   $('builder-ideal').addEventListener('click',()=>attempt(tidyAngles));
   new ResizeObserver(()=>{if(!$('builder-panel').hidden&&initialized){fitDrawing();renderDrawing();}}).observe(svg);
   recovery = window.AtlasDraftRecovery?.attach(() => draft, installDraft);
-  window.MoleculeBuilder={showBuilder,showExplorer,loadStructure,openViewer,getDraft:()=>M.checked(draft)};
+  window.MoleculeBuilder={showBuilder,showExplorer,loadStructure,openViewer,getDeskNotation,getDraft:()=>M.checked(draft)};
 })();

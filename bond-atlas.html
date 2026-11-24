@@ -213,6 +213,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 #builder-canvas { display:block; width:100%; height:445px; stroke:none; fill:none; touch-action:none; user-select:none; background-image:radial-gradient(var(--grid) .9px,transparent .9px); background-size:22px 22px; }
 #builder-canvas[data-tool="element"] { cursor:copy; } #builder-canvas[data-tool="bond"] { cursor:crosshair; } #builder-canvas[data-tool="erase"] { cursor:not-allowed; }
 #builder-canvas .sketch-atom { cursor:grab; } #builder-canvas .sketch-atom:active { cursor:grabbing; }
+#builder-canvas[data-tool="select"] .sketch-atom { cursor:pointer; }
 .sketch-bond-line { stroke:var(--ink); stroke-width:2; stroke-linecap:round; }
 .sketch-bond-hit { stroke:transparent; stroke-width:22; cursor:pointer; }
 .sketch-bond[aria-pressed="true"] .sketch-bond-line,.sketch-bond:focus-visible .sketch-bond-line { stroke:var(--accent); stroke-width:3; }
@@ -226,7 +227,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 .sketch-empty { fill:var(--muted); text-anchor:middle; font-family:var(--body); font-size:13px; stroke:none; }
 .builder-canvas-footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; align-items:center; padding:5px 12px; border-top:1px solid var(--line); }
 .builder-canvas-footer>span { color:var(--muted); font-family:var(--mono); font-size:10px; }
-.builder-canvas-footer>div { display:flex; gap:3px; }
+.builder-canvas-footer>div { display:flex; flex-wrap:wrap; gap:3px; }
 #builder-help { padding:4px 17px 16px; font-size:10px; color:var(--muted); line-height:1.9; max-width:75ch; }
 .builder-inspector { min-width:0; display:flex; flex-direction:column; gap:17px; padding:22px; border-left:1px solid var(--line); }
 .builder-identity { display:flex; flex-direction:column; gap:9px; }
@@ -282,28 +283,56 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     <div class="top-meta"><label class="language-control" for="language-select"><span data-i18n="shell.language">Language</span><select id="language-select" aria-label="Interface language" data-i18n-aria-label="shell.language"></select></label><button class="plain-button preferences-button" id="preferences-button" type="button" aria-haspopup="dialog" data-i18n="shell.preferences">Display &amp; accessibility</button><button class="plain-button" id="about-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 11v5m0-9v.1"></path></svg><span data-ui-label>Help &amp; scope</span></button></div>
   </header>
   <section class="intro"><div><h1>Molecules, from every angle.</h1><p>Build a structure. Explore its stereoisomers. See how one molecule can take different shapes.</p></div><div class="local-note">A CHEMISTRY VISUALIZATION LAB</div></section>
-  <nav class="lab-navigation" aria-label="Chemistry workspace"><button class="lab-view-button" id="show-explorer" type="button" aria-pressed="true">Explore isomers</button><button class="lab-view-button" id="show-stereo" type="button" aria-pressed="false">Stereo &amp; conformers</button><button class="lab-view-button" id="show-builder" type="button" aria-pressed="false">2D simulator</button><button class="plain-button" id="focus-viewer" type="button" hidden>View selected molecule ↓</button><span id="workspace-context">Constitutional isomers</span></nav>
+  <nav class="lab-navigation" aria-label="Chemistry workspace"><button class="lab-view-button" id="show-models" type="button" aria-pressed="true" data-i18n="models.title">Model workspace</button><button class="lab-view-button" id="show-reagents" type="button" aria-pressed="false" data-i18n="rx.tab">Reagents</button><button class="lab-view-button" id="show-explorer" type="button" aria-pressed="false">Explore isomers</button><button class="lab-view-button" id="show-stereo" type="button" aria-pressed="false">Stereo &amp; conformers</button><button class="lab-view-button" id="show-builder" type="button" aria-pressed="false">2D simulator</button><button class="plain-button" id="focus-viewer" type="button" hidden>View selected molecule ↓</button><span id="workspace-context">Constitutional isomers</span></nav>
   <main id="main-content" tabindex="-1" aria-label="Chemistry workspace">
+  <section id="model-desk" aria-labelledby="desk-title">
+    <header class="desk-bar"><h1 id="desk-title" data-i18n="models.title">Model workspace</h1>
+      <div class="desk-tools"><label id="desk-benz-wrap" hidden><span data-i18n="benz.label">Benzene view</span> <select class="compact-select" id="desk-benz" aria-describedby="desk-benz-note"></select></label><button type="button" id="desk-2d" aria-pressed="true">2D</button><button type="button" id="desk-3d" aria-pressed="false">3D</button>
+      <button type="button" id="desk-out" aria-label="Zoom out" data-i18n-aria-label="models.out">−</button><button type="button" id="desk-in" aria-label="Zoom in" data-i18n-aria-label="models.in">+</button><button type="button" id="desk-fit" data-i18n="shell.fit">Fit drawing</button></div>
+    </header>
+    <div class="desk-body"><aside class="desk-list" aria-labelledby="desk-list-title"><div class="desk-list-heading"><h2 id="desk-list-title" data-i18n="models.list">Molecules</h2><div class="desk-tools"><button type="button" id="desk-undo" data-i18n="shell.undo" disabled>Undo</button><button type="button" id="desk-redo" data-i18n="shell.redo" disabled>Redo</button></div></div>
+      <p data-i18n="models.intro">Enter a name or SMILES. Each visible row adds a model to the canvas.</p>
+      <div class="desk-bulk"><label><input type="checkbox" id="desk-all"><span data-i18n="models.selectAll">Select all</span></label><button type="button" class="plain-button" id="desk-remove-picked" disabled></button></div>
+      <ol id="desk-rows"></ol><button type="button" class="plain-button" id="desk-add" data-i18n="models.add">+ Add molecule</button>
+    </aside><div id="desk-stage" role="img" aria-label="Molecule comparison canvas" data-i18n-aria-label="models.canvas"></div></div>
+    <footer class="desk-footer"><span id="desk-caption"></span><span hidden id="desk-benz-note"></span><span id="desk-status" role="status"></span></footer>
+  </section>
+  <section id="reaction-panel" aria-labelledby="rx-title" hidden>
+    <header class="desk-bar"><h1 id="rx-title" data-i18n="rx.tab">Reagents</h1><span class="rx-kicker" lang="en">AQA 7405 · Organic mechanisms</span></header>
+    <div class="rx-layout"><aside class="rx-inputs"><label for="rx-substrate" data-i18n="rx.substrate">Starting molecule</label><input id="rx-substrate" value="CCBr" maxlength="160" spellcheck="false" autocomplete="off" dir="ltr" aria-describedby="rx-help">
+      <p id="rx-help" lang="en">Enter an English name or a simple neutral SMILES. Suggested reagents match the bonds in this molecule.</p>
+      <label for="rx-reagent" data-i18n="rx.reagent">Reagent</label><select id="rx-reagent" lang="en"></select>
+      <label for="rx-path" data-i18n="rx.path">Pathway</label><select id="rx-path" lang="en"></select><p id="rx-match" role="status" lang="en"></p>
+      <details id="rx-catalog"><summary data-i18n="rx.examples">Browse worked examples</summary><div id="rx-catalog-list" lang="en"></div></details>
+    </aside><article class="rx-work"><div id="rx-empty" role="status" lang="en" hidden></div>
+      <div id="rx-result" lang="en"><p class="rx-kicker" id="rx-family"></p><h2 id="rx-heading"></h2>
+        <label id="rx-benz-wrap" hidden><span data-i18n="benz.label">Benzene view</span> <select class="compact-select" id="rx-benz" aria-describedby="rx-benz-note"></select></label><p id="rx-benz-note" hidden></p>
+        <div class="rx-display"><svg id="rx-svg" role="img" aria-labelledby="rx-step-title rx-detail" dir="ltr"></svg><div id="rx-structure" hidden></div><small id="rx-legend"></small></div>
+        <div id="rx-progress" class="rx-kicker"></div><div id="rx-text" aria-live="polite" aria-atomic="true"><h3 id="rx-step-title"></h3><p id="rx-equation" dir="ltr"></p><p id="rx-detail"></p></div>
+        <div class="rx-controls"><button type="button" id="rx-prev" class="plain-button" data-i18n="rx.prev">Previous step</button><button type="button" id="rx-play" class="plain-button"></button><button type="button" id="rx-next" class="action-button" data-i18n="rx.next">Next step</button></div>
+        <div class="rx-products"><b data-i18n="rx.products">Products</b><span id="rx-products" dir="auto"></span></div></div>
+    </article></div><footer class="desk-footer" lang="en">Mechanism schematics, not molecular dynamics or yield predictions. A match is one possible pathway. Explanations are in English. <a href="https://filestore.aqa.org.uk/resources/chemistry/specifications/AQA-7404-7405-SP-2015.PDF" target="_blank" rel="noopener noreferrer">AQA specification · §§3.3.1–3.3.11</a></footer>
+  </section>
   <div id="form-error" role="alert" hidden></div>
   <section id="builder-panel" class="builder-panel" aria-labelledby="builder-title" hidden>
     <div class="builder-heading"><div><h2 id="builder-title">2D molecule simulator</h2><p>Sketch a molecule, move its atoms, then explore the same structure in 3D.</p></div><div class="builder-heading-actions"><button class="plain-button" id="builder-load-selected" type="button">Edit viewer structure</button><label class="builder-example-label" for="builder-example">Example<select class="compact-select" id="builder-example"><option value="">Load an example…</option><option value="ethanol">Ethanol</option><option value="acetone">Acetone</option><option value="but-1-yne">But-1-yne</option><option value="benzene">Benzene</option></select></label><button class="plain-button" id="builder-split" type="button" aria-controls="builder-split-pane" aria-pressed="false" data-i18n="split.action">Side by side</button><button class="action-button" id="builder-open-viewer" data-i18n="sim.preview" type="button" disabled>View in 3D</button></div></div>
+    <div id="desk-edit-actions" class="desk-bulk" hidden><button type="button" class="action-button" id="desk-apply"></button><button type="button" class="plain-button" id="desk-discard" data-i18n="models.cancelEdit">Back without applying</button></div>
     <a class="recovery-reminder" href="#draft-recovery-restore" data-i18n="learn.saved">A saved sketch is available</a>
     <p class="builder-message" id="builder-message" role="status" hidden></p>
-    <details id="drawing-tools" open><summary data-i18n="learn.tools">Drawing tools · atoms and bonds</summary><div class="builder-palette" aria-label="Drawing tools"><div class="builder-tool-group" id="builder-elements" role="group" aria-label="Elements"></div><div class="builder-tool-group" id="builder-bonds" role="group" aria-label="Bonds"></div><div class="builder-tool-group" role="group" aria-label="Ring templates"><button class="builder-tool" id="builder-ring" type="button" aria-pressed="false" title="Click and place, or drag a regular benzene ring onto the canvas">⌬ <small>Benzene</small></button></div><div class="builder-tool-group" role="group" aria-label="Edit tools"><button class="builder-tool" id="builder-move" type="button" aria-pressed="true" title="Select and drag atoms or bonds to move them">Move</button><button class="builder-tool" id="builder-elastic" type="button" aria-pressed="false" data-i18n="sim.drag">Elastic drag</button><button class="builder-tool" id="builder-erase" type="button" aria-pressed="false" title="Tap an atom or bond to delete it">Erase</button></div></div>
+    <details id="drawing-tools" open><summary data-i18n="learn.tools">Drawing tools · atoms and bonds</summary><div class="builder-palette" aria-label="Drawing tools"><div class="builder-tool-group" id="builder-elements" role="group" aria-label="Elements"></div><div class="builder-tool-group" id="builder-bonds" role="group" aria-label="Bonds"></div><div class="builder-tool-group" role="group" aria-label="Ring templates"><button class="builder-tool" id="builder-ring" type="button" aria-pressed="false" title="Click and place, or drag a regular benzene ring onto the canvas">⌬ <small>Benzene</small></button></div><div class="builder-tool-group" role="group" aria-label="Edit tools"><button class="builder-tool" id="builder-move" type="button" aria-pressed="true" title="Select and drag atoms or bonds to move them">Move</button><button class="builder-tool" id="builder-elastic" type="button" aria-pressed="false" data-i18n="sim.drag">Elastic drag</button><button class="builder-tool" id="builder-select-atoms" type="button" aria-pressed="false" data-i18n="builder.selectAtoms">Select atoms</button><button class="builder-tool" id="builder-erase" type="button" aria-pressed="false" title="Tap an atom or bond to delete it">Erase</button></div></div>
     </details>
-    <div class="builder-body"><div class="builder-drawing"><div class="builder-canvas-bar"><div class="sketch-instructions"><strong id="sketch-identity" dir="auto"></strong><span id="builder-tool-hint">Move · drag atoms to rearrange the drawing</span></div><div class="builder-arrange"><button class="plain-button" id="builder-ideal" type="button">Ideal bond angles</button><button class="plain-button" id="builder-fit" type="button">Fit</button></div></div><svg id="builder-canvas" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Molecule drawing canvas" aria-describedby="builder-help" tabindex="0"><title>Molecule drawing canvas</title></svg><div class="builder-canvas-footer"><span id="builder-counts">Example · ethanol</span><div><button class="plain-button" id="builder-undo" type="button" disabled>Undo</button><button class="plain-button" id="builder-redo" type="button" disabled>Redo</button><button class="plain-button" id="builder-clear" type="button">Clear</button></div></div><p id="builder-help" data-i18n="learn.canvasHint">Move an atom to change the drawing. Use a bond tool to change which atoms are connected.</p>
-      <section class="notebook" aria-labelledby="notebook-title"><header><span aria-hidden="true">Q &amp; A</span><h3 id="notebook-title" data-i18n="learn.practice">Predict &amp; check</h3></header>
-        <p data-i18n="learn.instruction">Make a prediction, then open the question to check your reasoning.</p>
-        <details><summary data-i18n="learn.q1">If you drag an atom, does the molecular formula change?</summary><p data-i18n="learn.a1">No. Try moving an atom and check the formula. The atoms and bonds are the same; only the drawing changed.</p></details>
-        <details><summary data-i18n="learn.q2">Is an angle on the sketch the angle in 3D?</summary><p data-i18n="learn.a2">Not necessarily. In a 3D conformer, select three atoms in order. The second is the vertex. Compare that measurement with the sketch.</p></details>
-        <details><summary data-i18n="learn.q3">Can two molecules with the same formula and bonds differ?</summary><p data-i18n="learn.a3">Yes. Compare cis- and trans-but-2-ene in Stereo &amp; conformers. Their methyl groups are on the same side of the double bond in cis and on opposite sides in trans.</p></details>
-      </section></div>
+    <div class="builder-body"><div class="builder-drawing"><div class="builder-canvas-bar"><div class="sketch-instructions"><strong id="sketch-identity" dir="auto"></strong><span id="builder-tool-hint">Move · drag atoms to rearrange the drawing</span></div><div class="builder-arrange"><button class="plain-button" id="builder-ideal" type="button">Ideal bond angles</button><button class="plain-button" id="builder-fit" type="button">Fit</button></div></div><svg id="builder-canvas" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Molecule drawing canvas" aria-describedby="builder-help builder-tool-hint" tabindex="0"><title>Molecule drawing canvas</title></svg><div class="builder-canvas-footer"><span id="builder-counts">Example · ethanol</span><div><button class="plain-button" id="builder-delete" type="button" hidden>Delete selection</button><button class="plain-button" id="builder-undo" type="button" disabled>Undo</button><button class="plain-button" id="builder-redo" type="button" disabled>Redo</button><button class="plain-button" id="builder-clear" type="button">Clear</button></div></div><p id="builder-help" data-i18n="learn.canvasHint">Move an atom to change the drawing. Use a bond tool to change which atoms are connected.</p>
+      <details id="sketch-guide"><summary data-i18n="guide.title">How to read this view</summary><dl>
+        <dt data-i18n="guide.connections">Atoms and bonds</dt><dd data-i18n="guide.connectionsText">Dragging an atom moves it on the page. Its bonds and the molecular formula stay the same.</dd>
+        <dt data-i18n="guide.angles">Drawing angles and 3D angles</dt><dd data-i18n="guide.anglesText">A sketch angle is not a 3D measurement. To measure a conformer, select three atoms in order. The second atom is the vertex.</dd>
+        <dt data-i18n="guide.stereo">Cis and trans</dt><dd data-i18n="guide.stereoText">In cis-but-2-ene the methyl groups lie on the same side of the double bond; in trans-but-2-ene they lie on opposite sides. Both examples are in Stereo &amp; conformers.</dd>
+      </dl></details></div>
     <section id="builder-split-pane" aria-labelledby="split-title" hidden>
       <header class="split-bar"><h3 id="split-title" data-i18n="split.title">Model preview</h3><button type="button" class="plain-button" id="split-refresh" data-i18n="split.refresh" hidden>Update preview</button></header>
       <p id="split-stale" role="status" data-i18n="split.stale" hidden>Sketch changed. Update the preview to link atoms again.</p>
     </section>
     <aside class="builder-inspector" aria-label="Live molecule identification"><div class="builder-identity" aria-live="polite" aria-atomic="true"><span class="field-label" id="builder-scene-label">What you’ve made</span><label for="builder-component" class="builder-component-label">Structure<select class="compact-select" id="builder-component"></select></label><h3 id="builder-name">Ethanol</h3><p class="builder-formula" id="builder-formula">C₂H₆O</p><p class="builder-recognition" id="builder-recognition">Matched by connectivity in the offline naming library.</p><dl class="builder-properties"><div><dt>Molar mass</dt><dd id="builder-mass">46.07 g/mol</dd></div><div><dt>Total atoms</dt><dd id="builder-total">9</dd></div><div><dt>Unsaturation</dt><dd id="builder-dbe">0 DBE</dd></div><div><dt>Groups</dt><dd id="builder-groups">Primary alcohol</dd></div><div><dt>SMILES</dt><dd id="builder-smiles">CCO</dd></div></dl><p class="builder-chemistry-note" id="builder-chemistry-note">Structural recognition only; this does not establish stability or safety.</p></div>
-    <div class="builder-selection"><h3>Selected atom or bond</h3><p id="builder-selection-label">Choose Move, then select an atom or bond.</p><div id="builder-atom-controls" hidden><label for="builder-replace-element">Element</label><select id="builder-replace-element" class="compact-select"></select><button class="plain-button" id="builder-grow" type="button" title="Attach the last chosen element with a single bond">Attach atom</button><label for="builder-charge">Charge</label><select id="builder-charge" class="compact-select"><option value="0">Neutral</option><option value="1">C⁺ carbocation</option></select></div><div id="builder-bond-controls" hidden><label for="builder-change-order">Bond order</label><select id="builder-change-order" class="compact-select"><option value="1">Single</option><option value="2">Double</option><option value="3">Triple</option></select></div><button class="plain-button" id="builder-delete" type="button" hidden>Delete selection</button></div>
+    <div class="builder-selection"><h3>Selected atom or bond</h3><p id="builder-selection-label">Choose Move, then select an atom or bond.</p><div id="builder-atom-controls" hidden><label for="builder-replace-element">Element</label><select id="builder-replace-element" class="compact-select"></select><button class="plain-button" id="builder-grow" type="button" title="Attach the last chosen element with a single bond">Attach atom</button><label for="builder-charge">Charge</label><select id="builder-charge" class="compact-select"><option value="0">Neutral</option><option value="1">C⁺ carbocation</option></select></div><div id="builder-bond-controls" hidden><label for="builder-change-order">Bond order</label><select id="builder-change-order" class="compact-select"><option value="1">Single</option><option value="2">Double</option><option value="3">Triple</option></select></div></div>
     <label class="builder-check" for="builder-angle-mode"><span data-i18n="builder.layoutMode">Move tool · 2D angles</span><select class="compact-select" id="builder-angle-mode" aria-describedby="builder-layout-help"><option value="free" data-i18n="builder.freeAngles">Free</option><option value="ideal" data-i18n="builder.snapAngles">Idealized chain ends</option></select></label><p class="builder-angle-note" id="builder-layout-help" data-i18n="builder.layoutHelp">Idealized Move snaps a chain end at a two-bond carbon to a 120° zigzag or 180° line. Other moves are free. Tidy redraws once. These are drawing guides, not measured 3D angles.</p><p class="builder-angle-note" id="builder-angle-note" hidden></p><label class="builder-check"><input id="builder-lone-pairs" type="checkbox"> Show lone pairs (••)</label><label class="builder-check"><input id="builder-clouds" type="checkbox"> Show π clouds in 3D</label><button class="plain-button" id="builder-open-all" type="button" hidden>Show all structures together in 3D →</button><div class="builder-projection-actions"><button class="plain-button" type="button" id="builder-to-skeletal" data-i18n="viewer.skeletal">Skeletal formula</button><button class="plain-button" id="builder-to-fischer" type="button">Fischer view</button><button class="plain-button" id="builder-to-newman" type="button">Newman view</button></div><p class="builder-scope">Separate fragments are identified as separate structures, never one molecule. C, H, N, O, F, Cl, Br, I; up to 64 non-hydrogen atoms per sketch. Carbon +1 carbocations are visualization-only. Names use a finite offline library. Projections illustrate arrangements; no R/S assignment is inferred.</p></aside></div>
     <div class="draft-recovery">
       <label class="builder-check"><input id="draft-recovery-enable" type="checkbox" autocomplete="off" aria-describedby="draft-recovery-help"><span data-i18n="recovery.enable">Keep a recovery copy in this browser</span></label>
@@ -313,7 +342,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
       <button class="plain-button" type="button" id="draft-recovery-discard" data-i18n="recovery.discard" hidden>Discard saved copy</button>
     </div>
   </section>
-  <div id="explorer-panel" data-view="explorer">
+  <div id="explorer-panel" data-view="explorer" hidden>
   <div id="constitutional-controls">
   <div class="entry-tools"><div class="entry-left"><label for="input-mode">Input type</label><select id="input-mode" class="compact-select"><option value="auto">Auto-detect</option><option value="formula">Molecular formula</option><option value="name">Compound name</option><option value="smiles">SMILES</option></select><span class="input-note">Use = for double bonds and # for triple bonds in SMILES.</span></div><div class="entry-actions"><button class="plain-button" id="open-import" type="button">Paste / import file ↗</button></div></div>
   <form id="search-form" novalidate>
@@ -437,7 +466,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   function uiAttr(target,attribute,key,params={},fallback){const node=typeof target==='string'?$(target):target;if(!node)return;if(I)I.bindAttr(node,attribute,key,params,fallback);else node.setAttribute(attribute,T(key,params,fallback));}
   function stereoText(iso){const text=R.stereoLabel(iso,T('stereo.unspecified'),T('stereo.assignedUnknown'));return text==='Unassigned stereochemistry'?T('viewer.unassigned',{},text):text==='No assigned stereogenic features'?T('viewer.noFeatures',{},text):text;}
   function sourceText(source){const known={'Local systematic name parser':'reason.parsedName','Offline name map':'reason.familiarName','3D stereoisomer comparison':'viewer.sceneSource','Backend conformer sampling':'viewer.conformerSource','Selected stereoisomer conformer':'viewer.selectedSource','Possible stereoisomers':'viewer.possibleSource'};if(known[source])return T(known[source]);const imported=/^RDKit (SMILES|JSON|MOL|SDF) import$/.exec(source||'');return imported?T('explorer.importSource',{format:imported[1]}):source;}
-  const state = { labView:'explorer', pendingScene:null, sortReference:null, clouds:false, lonePairs:false, together:false, electronShapes:[], sceneGeometries:[], result: null, filtered: [], selected: null, mode: '3d', hydrogens: true, labels: false, rotating: false, viewer: null, initialView: null, renderFailed: false, busy: false, generation: 0, visibleLimit: 40 };
+  const state = { labView:'models', pendingScene:null, sortReference:null, clouds:false, lonePairs:false, together:false, electronShapes:[], sceneGeometries:[], result: null, filtered: [], selected: null, mode: '3d', hydrogens: true, labels: false, rotating: false, viewer: null, initialView: null, renderFailed: false, busy: false, generation: 0, visibleLimit: 40 };
   const layoutCache = new Map(), geomCache = new Map(), imageCache = new Map();
   let visibilityFrame=null;
   const R=window.MoleculeRecords;
@@ -489,18 +518,24 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     if(missing)ui('geometry-status','viewer.geometryMissing');else $('geometry-status').textContent='';
   }
   function showView(view){
-    if(view==='builder')cancelPendingScene();
-    else state.split=false;
+    const standalone=view==='models'||view==='reagents';
+    if(view==='builder'||standalone)cancelPendingScene();
+    if(view!=='builder')state.split=false;
+    if(standalone)stopRotation();
+    $('reaction-panel').hidden=view!=='reagents';
+    document.body.dataset.workspace=view; $('model-desk').hidden=view!=='models';
     $('builder-split').setAttribute('aria-pressed',String(!!state.split));
-    state.labView=view;alignWorkspaces();$('builder-panel').hidden=view!=='builder';$('explorer-panel').hidden=view==='builder';$('explorer-panel').dataset.view=view;
+    state.labView=view;alignWorkspaces();$('builder-panel').hidden=view!=='builder';$('explorer-panel').hidden=view==='builder'||standalone;$('explorer-panel').dataset.view=view;
     $('constitutional-controls').hidden=view!=='explorer';$('stereo-explorer').hidden=view!=='stereo';
     $('workspace').hidden=view==='stereo'&&!R.isRecord(state.selected);
-    for(const name of ['explorer','stereo','builder'])$('show-'+name).setAttribute('aria-pressed',String(view===name));
-    ui('workspace-context',({explorer:'explorer.context',stereo:'explorer.stereoContext',builder:'explorer.builderContext'})[view]);
+    for(const name of ['models','reagents','explorer','stereo','builder'])$('show-'+name).setAttribute('aria-pressed',String(view===name));
+    ui('workspace-context',({models:'viewer.empty',reagents:'rx.tab',explorer:'explorer.context',stereo:'explorer.stereoContext',builder:'explorer.builderContext'})[view]);
     $('focus-viewer').hidden=view!=='stereo'||!R.isRecord(state.selected);
     const emptyStereo=view==='stereo'&&!R.isRecord(state.selected);document.querySelector('.export-bar').hidden=emptyStereo;document.querySelector('.status-row').hidden=emptyStereo;
     if(visibilityFrame!==null)cancelAnimationFrame(visibilityFrame);
-    visibilityFrame=view==='builder'&&!state.split?null:requestAnimationFrame(()=>{
+    window.ModelDesk?.setActive(view==='models');
+    window.ReagentDesk?.setActive(view==='reagents');
+    visibilityFrame=(standalone||view==='builder'&&!state.split)?null:requestAnimationFrame(()=>{
       visibilityFrame=null;
       if((state.labView==='builder'&&!state.split)||!state.selected)return;
       const visible=$('model-stage').getBoundingClientRect();
@@ -913,13 +948,21 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     async drawImage(canvas,iso,mode){if(R.isRecord(iso)){const key=(iso.depictionId||iso.id)+':'+mode+':'+color('--ink');let image=imageCache.get(key);if(!image){image=new Image();imageCache.set(key,image);image.src=R.imageURL(R.themedSVG(iso.depictions[mode==='displayed'?'displayed':'skeletal'],color('--ink')));}if(!image.complete||!image.naturalWidth)await image.decode();}drawStructure(canvas,iso,mode,false);}
   };
   $('explore-formula').addEventListener('click',()=>{if(state.selected)window.BondAtlas.searchFormula(state.selected.formula);});
-  $('show-stereo').addEventListener('click',()=>showView('stereo'));
+  $('show-reagents').addEventListener('click',()=>showView('reagents'));
+  $('show-models').addEventListener('click',()=>showView('models'));
+  $('show-stereo').addEventListener('click',()=>{showView('stereo');loadStereoExample();});
   $('focus-viewer').addEventListener('click',()=>{$('workspace').scrollIntoView({behavior:(window.AtlasPreferences?.reducedMotion||matchMedia('(prefers-reduced-motion: reduce)').matches)?'instant':'smooth',block:'start'});});
   $('show-explorer').addEventListener('click',()=>{if(!state.result&&!state.busy)search();});
-  ChemistryClient.ready.then(async capabilities=>{
-    if(!capabilities?.available){search();return;}showView('stereo');
-    try{const example=await ChemistryClient.job('enumerate',{text:'CC(O)C(=O)O',format:'smiles',maxIsomers:8});if(!state.result&&state.labView==='stereo'&&$('stereo-explorer').getAttribute('aria-busy')!=='true'&&(!$('stereo-input')||$('stereo-input').value.trim()==='CC(O)C(=O)O'))window.StereoExplorer?.loadResult({...example,enumerateAll:false},{fromEnumeration:true,source:'Worked example · lactic acid'});}catch(e){/* A queued default example must never prevent manual input. */}
-  });
+  let examplePending=false;
+  async function loadStereoExample(){
+    if(examplePending||state.result)return;
+    const capabilities=await ChemistryClient.ready;
+    if(examplePending||!capabilities?.available||state.labView!=='stereo'||state.result)return;
+    examplePending=true;
+    try{const example=await ChemistryClient.job('enumerate',{text:'CC(O)C(=O)O',format:'smiles',maxIsomers:8});if(!state.result&&state.labView==='stereo'&&$('stereo-explorer').getAttribute('aria-busy')!=='true'&&(!$('stereo-input')||$('stereo-input').value.trim()==='CC(O)C(=O)O'))window.StereoExplorer?.loadResult({...example,enumerateAll:false},{fromEnumeration:true,source:'Worked example · lactic acid'});}catch(e){/* The examples menu remains available. */}
+    finally{examplePending=false;}
+  }
+  showView('models');
 })();
 </script>
 <script src="interchange-ui.js"></script>
@@ -928,3 +971,15 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 <script src="textbook-ui.js"></script>
 <script src="stereo-ui.js"></script>
 <script src="quantum-grid.js"></script>
+<script src="model-input.js"></script>
+<script src="benzene-view.js"></script>
+<script src="model-stage.js"></script>
+<script src="model-desk.js"></script>
+<script src="reaction-rules.js"></script>
+<script src="reaction-diagram.js"></script>
+<script src="reaction-addition.js"></script>
+<script src="reaction-aromatic.js"></script>
+<script src="reaction-substitution.js"></script>
+<script src="reaction-motifs.js"></script>
+<script src="reaction-library.js"></script>
+<script src="reaction-ui.js"></script>

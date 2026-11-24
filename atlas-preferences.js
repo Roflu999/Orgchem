@@ -177,7 +177,7 @@
     }
     $('focus-viewer')?.addEventListener('click',()=>{const app=root.BondAtlas;const target=app?.state.mode==='3d'?model:$('representation-panel');target?.focus({preventScroll:true});});
     doc.querySelector('.skip-link')?.addEventListener('click',()=>{(root.requestAnimationFrame||setTimeout)(()=>$('main-content')?.focus({preventScroll:true}));});
-    ['show-explorer','show-stereo','show-builder'].forEach(id=>$(id)?.addEventListener('click',event=>{if(event.detail===0)(root.requestAnimationFrame||setTimeout)(()=>$('main-content')?.focus({preventScroll:true}));}));
+    ['show-models','show-reagents','show-explorer','show-stereo','show-builder'].forEach(id=>$(id)?.addEventListener('click',event=>{if(event.detail===0)(root.requestAnimationFrame||setTimeout)(()=>$('main-content')?.focus({preventScroll:true}));}));
     bindStatic();disclosures();I.apply();appearance();sync();summary();
     doc.addEventListener('bondatlas:selection',summary);doc.addEventListener('atlas:localechange',summary);
   }

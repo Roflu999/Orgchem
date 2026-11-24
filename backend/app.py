@@ -22,7 +22,8 @@ PUBLIC_FILES = {
     "chemistry.js", "systematic-name.js", "chemistry-worker.js", "geometry.js", "formats.js", "interchange-ui.js",
     "sketcher-model.js", "draft-recovery.js", "sketcher-ui.js", "scene.js", "orbitals.js", "projections.js",
     "isomer-types.js", "textbook-ui.js", "molecule-record.js", "chemistry-client.js",
-    "stereo-ui.js", "stereo.css", "workbench.css", "quantum-grid.js", "structure-notes.js", "atom-inspection.js",
+    "stereo-ui.js", "stereo.css", "workbench.css", "quantum-grid.js", "structure-notes.js", "atom-inspection.js", "model-input.js", "model-stage.js", "model-desk.js",
+    "benzene-view.js", "reaction-rules.js", "reaction-diagram.js", "reaction-addition.js", "reaction-aromatic.js", "reaction-substitution.js", "reaction-motifs.js", "reaction-library.js", "reaction-ui.js",
     "atlas-i18n.js", "atlas-locales.js", "atlas-shell-locales.js", "atlas-preferences.js", "atlas-fonts.css", "viewer-lifecycle.js",
 }
 FONT_FILES = frozenset(item["name"] for item in json.loads((ROOT / "vendor/fonts/manifest.json").read_text())["files"]

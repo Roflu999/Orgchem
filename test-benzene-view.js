@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('node:assert/strict');
+const Chem=require('./chemistry.js'), B=require('./benzene-view.js');
+const ring=Chem.describe(Chem.readSmiles('C1=CC=CC=C1'));
+assert(B.matches(ring));assert(B.matches({...ring,bonds:ring.bonds.map(b=>({...b,order:1.5,aromatic:true}))}));
+for(const s of ['C1CCCCC1','C1=CCCC=C1','CC1=CC=CC=C1','C1=CC=CN=C1','C=CC=CC=C'])assert(!B.matches(Chem.describe(Chem.readSmiles(s))),s);
+assert(!B.matches({...ring,isotopes:[13,0,0,0,0,0]}));assert(!B.matches({...ring,charges:[1,0,0,0,0,0]}));
+const pictures=['kekuleA','kekuleB','electrons','cloud'].map(mode=>B.svg(mode,'#123456'));
+assert.equal((pictures[0].match(/<path /g)||[]).length,3);assert.notDeepEqual(pictures[0].match(/<path[^>]+>/g),pictures[1].match(/<path[^>]+>/g));
+assert.equal((pictures[2].match(/<circle /g)||[]).length,6);assert(pictures[3].includes('<ellipse'));assert(!pictures[3].includes('<circle'));
+console.log('Benzene: strict ring recognition, two Kekule contributors, six pi electrons and two cloud regions passed.');

@@ -329,6 +329,7 @@ def main():
                     page.on('response',remember_job)
                     try:
                         page.goto(args.url, wait_until='domcontentloaded', timeout=20000)
+                        page.locator('#show-stereo').click()
                         expect(page.locator('#stereo-generate')).to_be_enabled(timeout=15000)
                         CASES[name](page)
                         assert not errors, errors

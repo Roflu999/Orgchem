@@ -52,7 +52,7 @@ function bounds(d) {
 const ethanol = () => build(['C', 'C', 'O'], [[0, 1, 1], [1, 2, 1]]);
 
 test('CommonJS exports and fresh empty drafts', () => {
-  assert.deepEqual(Object.keys(S).sort(), ['empty', 'addAtom', 'moveAtom', 'elasticDrag', 'setElement', 'setCharge', 'setBond', 'removeAtom', 'removeBond', 'fromStructure', 'analyze', 'validate', 'checked', 'toAdvanced', 'chemicalSignature', 'VAL', 'PERIODIC'].sort());
+  assert.deepEqual(Object.keys(S).sort(), ['empty', 'addAtom', 'moveAtom', 'elasticDrag', 'setElement', 'setCharge', 'setBond', 'removeAtom', 'removeAtoms', 'removeBond', 'fromStructure', 'analyze', 'validate', 'checked', 'toAdvanced', 'chemicalSignature', 'VAL', 'PERIODIC'].sort());
   assert.equal(globalThis.MoleculeSketcher, S);
   const a = S.empty(), b = S.empty();
   assert.deepEqual(a, { atoms: [], bonds: [] });
@@ -162,6 +162,18 @@ test('atom deletion removes incident bonds and reindexes surviving endpoints', (
   assert.equal(valid(last).structure.name, 'Ethanol');
   assert.deepEqual(valid(last).hydrogens, [0, 2, 2, 1]);
   assert.deepEqual(S.removeAtom(build(['C']), 0), S.empty());
+});
+
+test('batch deletion uses original indices, drops only incident bonds, and rejects invalid batches atomically', () => {
+  const original = freeze(draft(['H','C','O','H','C','N'], [[0,1,1],[2,1,1],[2,3,1],[4,1,2],[4,5,1]]));
+  const remaining = S.removeAtoms(original, [3,0,5,3]);
+  assert.deepEqual(remaining.atoms, [original.atoms[1], original.atoms[2], original.atoms[4]]);
+  assert.deepEqual(remaining.bonds, [{a:1,b:0,order:1}, {a:2,b:0,order:2}]);
+  assert.deepEqual(S.removeAtoms(original, [4]), S.removeAtom(original, 4));
+  assert.deepEqual(S.removeAtoms(original, []), original);
+  assert.deepEqual(S.removeAtoms(original, [4,2,0,1,3,5]), S.empty());
+  for (const bad of [[1,6], ['2'], [0,-1], [0,.5], null, Array(1)]) assert.throws(() => S.removeAtoms(original, bad));
+  assert.equal(original.atoms.length, 6); assert.equal(original.bonds.length, 5);
 });
 
 test('bond deletion is undirected, preserves atoms, and absent edges are harmless', () => {

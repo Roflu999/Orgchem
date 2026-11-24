@@ -67,9 +67,109 @@ try {
       await delay(50);
     }
   };
+  assert.equal(el('show-models').getAttribute('aria-pressed'),'true');
+  const rows=()=>[...doc.querySelectorAll('#desk-rows > li')];
+  const type=(row,value)=>{const f=row.querySelector('input');f.value=value;f.dispatchEvent(new w.Event('input',{bubbles:true}));};
+  const action=(row,name)=>[...row.querySelectorAll('button')].find(b=>b.textContent===name).click();
+  const images=()=>doc.querySelectorAll('#desk-stage img').length;
+  // Benzene views must never mutate the graph or change which mechanisms match.
+  const firstRow=rows()[0], source=firstRow.querySelector('input').value;
+  type(firstRow,'benzene');assert(!el('desk-benz-wrap').hidden);
+  for(const mode of ['kekuleA','kekuleB','electrons','cloud']){
+    select('desk-benz',mode);assert(decodeURIComponent(doc.querySelector('#desk-stage img').src).includes(`data-benzene-mode="${mode}"`));
+    assert.equal(firstRow.querySelector('.row-formula').textContent,'C₆H₆');
+  }
+  el('desk-undo').click();assert.equal(firstRow.querySelector('input').value,source);assert(el('desk-benz-wrap').hidden);
+  el('show-reagents').click();assert(!el('reaction-panel').hidden);assert(el('model-desk').hidden);assert(el('explorer-panel').hidden);
+  const examples=Array.from(doc.querySelectorAll('#rx-catalog-list button'));
+  for(const example of examples){example.click();assert(!el('rx-result').hidden,example.dataset.example);assert(el('rx-products').textContent.trim());
+    for(let i=0;!el('rx-next').disabled&&i<15;i++){el('rx-next').click();assert(el('rx-equation').textContent.trim());}
+    assert(el('rx-next').disabled&&el('rx-step-title').textContent==='Products',example.dataset.example);
+  }
+  const nitrate=examples.find(b=>b.dataset.example==='benzene-nitration');nitrate.click();select('rx-benz','cloud');
+  assert(decodeURIComponent(el('rx-structure').querySelector('img').src).includes('data-benzene-mode="cloud"'));
+  for(let i=0;i<3;i++)el('rx-next').click();assert(el('rx-benz-wrap').hidden);assert.deepEqual(errors,[]);assert.equal(el('rx-svg').querySelectorAll('[data-electrons="2"]').length,2,el('rx-heading').textContent+' / '+el('rx-step-title').textContent+' / '+el('rx-svg').innerHTML.slice(0,200));
+  el('rx-substrate').value='N[C@@H](C)C(=O)O';el('rx-substrate').dispatchEvent(new w.Event('input',{bubbles:true}));assert(el('rx-result').hidden);assert.equal(el('rx-products').textContent,'');
+  el('show-models').click();assert(el('reaction-panel').hidden);console.log('PASS: all '+examples.length+' reagent examples, exam electron flow, benzene modes and unsupported-input clearing');
+  const undo=el('desk-undo'),redo=el('desk-redo');
+  const shortcut=(node,key,shiftKey=false)=>node.dispatchEvent(new w.KeyboardEvent('keydown',{key,ctrlKey:true,shiftKey,bubbles:true,cancelable:true}));
+  assert(undo.disabled&& !redo.disabled);assert.equal(images(),1);
+  action(rows()[0],'Duplicate');const copy=rows()[1];assert.equal(images(),2);
+  assert(shortcut(copy.querySelector('input'),'z'),'leave native text undo alone');
+  assert(!shortcut(el('desk-all'),'z'));assert.equal(rows().length,1);assert(undo.disabled);assert.equal(doc.activeElement,redo);
+  assert(!shortcut(redo,'z',true));assert.equal(rows()[1],copy);assert.equal(images(),2);
+  type(copy,'dime');type(copy,'dimethyl ether');undo.click();assert.equal(copy.querySelector('input').value,'ethanol');
+  redo.click();assert.equal(copy.querySelector('input').value,'dimethyl ether');undo.click();
+  type(rows()[1],'dimethyl ether');assert.equal(images(),2);assert.equal(rows()[1].querySelector('.row-formula').textContent,'C₂H₆O');
+  action(rows()[0],'Hide');assert.equal(images(),1);action(rows()[0],'Show');assert.equal(images(),2);
+  // No WebGL in jsdom: a real conformer must still be measured, and the scene must fall back explicitly.
+  el('desk-3d').click();await until(()=>el('desk-status').textContent.includes('3D rendering unavailable'),'explicit WebGL fallback');
+  assert.equal(el('desk-2d').getAttribute('aria-pressed'),'true');assert.equal(images(),2);
+  const measured=rows().find(row=>!row.querySelector('details').hidden);assert(measured);
+  assert.match(measured.querySelector('output').textContent,/Å/);
+  action(rows()[1],'Remove');el('desk-add').click();type(rows()[1],'C/C=C/C');
+  await until(()=>!rows()[1].querySelector('details').hidden,'assigned alkene in a second independent row');
+  assert.equal(images(),2);assert.equal(doc.querySelectorAll('#desk-stage button, #desk-stage input, #desk-stage select').length,0);
+  type(rows()[1],'');assert.equal(images(),1);assert(rows()[1].querySelector('details').hidden);
+  const originalResolve=w.ModelInput.resolve,held=[];
+  w.ModelInput.resolve=(value,{signal})=>new Promise(resolve=>held.push({value,signal,resolve}));
+  try {
+    type(rows()[1],'C/C=C/C');
+    // Use an uncached stereo string: an earlier completed record may be reused.
+    type(rows()[1],'C/C=C/Br');await until(()=>held.length===1,'start an editable row calculation');
+    type(rows()[1],'ethane');assert(held[0].signal.aborted);
+    held[0].resolve({record:w.ModelInput.preview('hexane'),geometry:null,reason:'no-conformer'});
+    await delay(0);assert.equal(rows()[1].querySelector('.row-formula').textContent,'C₂H₆');
+    assert(rows()[1].querySelector('details').hidden);
+  } finally {w.ModelInput.resolve=originalResolve;}
+  console.log('PASS: editable comparison rows, immediate sketches, duplicate/hide/remove, real conformer lengths, model-only canvas and graceful WebGL fallback');
+  // Remove a non-contiguous batch, including a hidden row and one with pending work.
+  const checkRow=r=>r.querySelector('input[type=checkbox]').click();
+  el('desk-add').click();const before=rows();action(before[0],'Hide');
+  const pending=[];w.ModelInput.resolve=(value,{signal})=>new Promise(resolve=>pending.push({signal,resolve}));
+  try {
+    type(before[2],'C/C=C/F');await until(()=>pending.length===1,'pending row for removal');
+    checkRow(before[0]);checkRow(before[2]);assert(el('desk-all').indeterminate);
+    el('desk-remove-picked').click();assert.deepEqual(rows(),[before[1]]);assert(pending[0].signal.aborted);
+    pending[0].resolve({record:w.ModelInput.preview('propane'),reason:'no-conformer'});await delay(0);assert.equal(images(),1);
+    el('desk-undo').click();assert.deepEqual(rows(),before);assert.equal(before[0].dataset.visible,'false');
+    await until(()=>pending.length===2,'restart restored row');redo.click();assert.deepEqual(rows(),[before[1]]);assert(pending[1].signal.aborted);
+    pending[1].resolve({record:w.ModelInput.preview('hexane'),reason:'no-conformer'});await delay(0);undo.click();assert.deepEqual(rows(),before);
+    type(before[2],'butane');assert.equal(images(),2);assert(redo.disabled,'new edit must discard redo branch');
+  } finally {w.ModelInput.resolve=originalResolve;}
+  el('desk-all').click();el('desk-remove-picked').click();assert.equal(rows().length,0);assert.equal(images(),0);
+  el('desk-undo').click();assert.deepEqual(rows(),before);
+  const atomKey=(i,key)=>doc.querySelector(`#builder-canvas [data-atom="${i}"]`).dispatchEvent(new w.KeyboardEvent('keydown',{key,bubbles:true}));
+  const chooseEnds=()=>{const d=w.MoleculeBuilder.getDraft();const degree=d.atoms.map(()=>0);for(const {a,b} of d.bonds){degree[a]++;degree[b]++;}el('builder-select-atoms').click();degree.forEach((n,i)=>{if(n===1)atomKey(i,' ');});el('builder-delete').click();};
+  action(before[2],'Edit atoms');chooseEnds();assert.equal(w.MoleculeBuilder.getDraft().atoms.length,2);
+  el('builder-undo').click();assert.equal(w.MoleculeBuilder.getDraft().atoms.length,4);
+  chooseEnds();el('desk-discard').click();assert.equal(before[2].querySelector('.row-formula').textContent,'C₄H₁₀');
+  action(before[2],'Edit atoms');chooseEnds();el('desk-apply').click();assert.deepEqual(rows(),before);
+  assert.equal(before[2].querySelector('.row-formula').textContent,'C₂H₆');assert.equal(before[0].dataset.visible,'false');
+  assert(before[2].querySelector('details').hidden,'old measurements must not follow an edit');
+  undo.click();assert.equal(before[2].querySelector('input').value,'butane');redo.click();assert.equal(before[2].querySelector('.row-formula').textContent,'C₂H₆');
+  action(before[2],'Edit atoms');el('builder-select-atoms').click();atomKey(0,' ');atomKey(1,' ');el('builder-delete').click();
+  assert.equal(el('desk-apply').textContent,'Remove molecule '+before[2].querySelector('.row-number').textContent.replace(/^0/,''));
+  el('desk-apply').click();assert.deepEqual(rows(),before.slice(0,2));el('desk-undo').click();assert.deepEqual(rows(),before);
+  type(before[2],'C[C@H](F)CCC');await until(()=>!before[2].querySelector('details').hidden,'mapped chiral input');
+  action(before[2],'Edit atoms');const mapped=w.MoleculeBuilder.getDraft();
+  const neighbours=i=>mapped.bonds.filter(b=>b.a===i||b.b===i).map(b=>b.a===i?b.b:b.a);
+  const end=mapped.atoms.findIndex((a,i)=>a.e==='C'&&neighbours(i).length===1&&neighbours(neighbours(i)[0]).length===2);
+  assert(end>=0);el('builder-select-atoms').click();atomKey(end,' ');el('builder-delete').click();
+  await until(()=>!el('desk-apply').disabled,'validated edited stereochemistry');el('desk-apply').click();
+  assert.match(before[2].querySelector('.row-head > input').value,/@/);await until(()=>!before[2].querySelector('details').hidden,'new conformer after deletion');
+  assert.equal(before[2].querySelector('.row-formula').textContent,'C₄H₉F');
+  // At capacity, undo the later additions before undoing a deletion; no rows are lost or overwritten.
+  el('desk-2d').click();assert.equal(el('desk-status').textContent,'Models shown: 2');
+  el('desk-all').click();el('desk-remove-picked').click();assert.equal(el('desk-status').textContent,'No models to display');
+  for(let i=0;i<8;i++)el('desk-add').click();assert(el('desk-add').disabled);
+  for(let i=0;i<9;i++)undo.click();assert.deepEqual(rows(),before);
+  for(let i=0;i<9;i++)redo.click();assert.equal(rows().length,8);assert(el('desk-add').disabled);
+  console.log('PASS: bounded-list undo/redo, pending cancellation on redo, text shortcut isolation, per-row atom edits and validated chiral conformers');
+  el('show-stereo').click();
   await until(() => doc.querySelectorAll('.stereo-variant').length === 2, 'two real RDKit lactic-acid variants');
   assert.equal(el('show-stereo').getAttribute('aria-pressed'), 'true');
-  console.log('PASS: startup loaded two stereoisomers from the local RDKit service');
+  console.log('PASS: opening the stereo workspace loaded two stereoisomers from the local RDKit service');
   el('show-builder').click();
   assert.equal(el('builder-panel').hidden, false);
   select('builder-example', 'benzene');
@@ -88,7 +188,7 @@ try {
   select('builder-example','ethanol');
   const draft=w.MoleculeBuilder.getDraft(), oxygen=draft.atoms.findIndex(a=>a.e==='O');
   const pick=(index,key='Enter')=>doc.querySelector(`#builder-canvas [data-atom="${index}"]`).dispatchEvent(new w.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}));
-  pick(oxygen);el('builder-split').click();
+  el('builder-move').click();pick(oxygen);el('builder-split').click();
   assert.equal(el('workspace').parentElement,el('builder-split-pane'));
   const model=w.BondAtlas.state.selected, inspected=w.BondAtlas.inspection;
   assert.deepEqual(Array.from(inspected.getSelection().atomIndices),[model.atoms.indexOf('O')]);

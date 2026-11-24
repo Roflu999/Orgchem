@@ -1,4 +1,11 @@
-# v3.2.0: Student molecule simulator
+# v3.3.0: Molecule workspace and reaction mechanisms
+
+- Compare up to eight molecules in a model-only canvas. In 3D, all molecules share one scale; bond lengths and molecular spans come from calculated conformer coordinates.
+- Add, duplicate, hide or remove molecules individually or in batches. Edit atoms in the 2D sketcher and apply changes to the originating row. Undo and redo list changes or sketch edits.
+- Open **Reagents** to match a starting structure to supported pathways. Step through 27 worked examples covering the AQA 7405 organic mechanism families and selected extensions, with products, intermediates and exam-style electron-flow arrows. Matches are not yield predictions.
+- Compare the two Kekulé contributors of benzene, count its six pi electrons, or display the schematic delocalised electron cloud. The display choice does not change the molecule.
+
+## v3.2.0: Student molecule simulator
 
 - Sketch or edit a molecule in 2D, explore it in 3D, and return to the drawing. Desktop side-by-side mode links atom selection and flags out-of-date previews.
 - Choose freehand or idealized chain-end angles. Select two model atoms for distance or three for the angle at the middle atom. Measurements identify the geometry source.

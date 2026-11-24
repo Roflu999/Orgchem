@@ -1,6 +1,6 @@
 # Student walkthrough: predict, manipulate, explain
 
-Use this short lab with a first-time organic chemistry student. It doubles as a release check. Start with a fresh sketch; no account, saved draft, or analytics is needed. Allow about ten minutes. Do not reveal the notebook answers before the prediction.
+Use this short lab with a first-time organic chemistry student. It doubles as a release check. Start with a fresh sketch; no account, saved draft, or analytics is needed. Allow about ten minutes. For this guided exercise, ask for a prediction before opening **How to read this view**. In ordinary exploration the guide stays closed unless requested.
 
 | Task | What to look for | Follow-up that tests understanding |
 | --- | --- | --- |

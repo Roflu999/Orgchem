@@ -58,6 +58,35 @@ Methods, energy units, relative energies, convergence, seed and warnings remain 
 
 **Together** lays out selected structures in a shared 3D scene. Scene placement does not add bonds or model molecular interactions. Starting conformers can be generated for a comparison that lacks 3D coordinates. Use the ensemble controls for broader conformational sampling.
 
+## Model workspace
+
+The landing page is a model canvas with an editable list alongside it (below it on phones). Enter an English compound name or SMILES; duplicate a row, replace the text, or hide it to compare up to eight models. Try `ethanol` and `dimethyl ether` in 2D, or `ethane` and `hexane` in 3D. Sketches are schematic. The 3D scene fits the **whole collection**, not each molecule individually: all visible models use one orthographic scale and the gaps between models have no chemical meaning.
+
+Use **Remove** on one row, or check several rows and choose **Remove selected**. **Select all** includes hidden molecules. **Undo** and **Redo**, next to the Molecules heading, step through the last 32 list changes: adding or duplicating rows, editing inputs, hiding or showing models, removing a batch, and applying an atom edit. One undo restores a removed group in its original order and visibility. A fresh edit clears redo. Outside text fields, use Ctrl/Cmd+Z to undo and Ctrl/Cmd+Shift+Z or Ctrl+Y to redo; inside a field, native text editing shortcuts are preserved.
+
+To remove atoms from a model, choose **Edit atoms** on its row. Use **Erase** for one atom, or choose **Select atoms**, tap the atoms (or Tab to each and press Space), then **Delete selection**. Attached bonds are removed too. **Undo** restores the whole batch in the sketch. **Apply to molecule** updates just the originating row; **Back without applying** leaves it unchanged. If no atoms remain, the apply button explicitly offers to remove the molecule instead.
+
+Expand **Measurements** on a generated row for bond lengths and the largest atom-center separation, including hydrogen, in ångströms. These are calculated distances for that conformer, not experimental measurements or a surface diameter. Unsupported geometry, disconnected fragments and unspecified stereochemistry do not receive invented lengths. Editing a row clears its old measurements immediately. Local 2D previews work without the server; generating checked 3D coordinates needs the same-origin RDKit service. Workspace rows last until reload; sketchpad draft recovery is separate.
+
+## Reagents and electron flow
+
+Open **Reagents** and enter a starting molecule. Reagents that match its connectivity appear first. If more than one pathway matches (try `CCBr` with hydroxide), the pathway selector lets you compare them; order does not indicate yield. **Browse worked examples** loads a reagent and substrate together. **Next step** is manual; **Play steps** is optional and respects reduced motion. Products, intermediates and explanations are in English. No reagent is applied to, or consumed from, the model desk.
+
+The first syllabus is [AQA A-level Chemistry 7405](https://filestore.aqa.org.uk/resources/chemistry/specifications/AQA-7404-7405-SP-2015.PDF), not a claim of universal exam-board coverage:
+
+| AQA section | Mechanisms represented |
+|---|---|
+| 3.3.2.4 | Alkane chlorination: initiation, two propagation steps, termination |
+| 3.3.3.1–2; 3.3.11.3 | Haloalkane substitution with hydroxide, cyanide, ammonia and amines up to a quaternary salt; competing elimination |
+| 3.3.4.2; 3.3.5.1, 3.3.5.3 | Alkene addition with HBr, bromine or sulfuric acid; acid-catalysed hydration and alcohol dehydration |
+| 3.3.8 | Carbonyl addition of hydride or cyanide followed by proton transfer |
+| 3.3.9.2; 3.3.11.3 | Acyl chloride addition–elimination with water, alcohol, ammonia or primary amine; anhydride examples also available |
+| 3.3.10.2 | Benzene nitration and Friedel–Crafts acylation, including electrophile generation and recovery of aromaticity |
+
+The matcher tests molecular graphs rather than names; its scope is small neutral molecules, not arbitrary polyfunctional substrates or a general reaction predictor. Curly arrows track electron pairs; single-barbed fishhooks track individual electrons. An elementary step is distinct from a net equation (sulfate ester hydrolysis is shown only as a net transformation). Curves show formal electron accounting, not measured electron trajectories.
+
+For unsubstituted benzene, the 2D model desk and the starting-molecule frame in Reagents offer **Kekulé A/B**, **π electrons**, and **π electron cloud**. Dot pairs show one resonance contributor; the two cloud regions show delocalised density above and below the ring plane. Neither switching contributors nor stepping through the mechanism changes the electronic calculation: these are explanatory drawings, not quantum-density calculations.
+
 ## Linked textbook views
 
 Switch the selected state among **3D model** (ball & stick), **2D structure** (skeletal), **All atoms** (displayed), **Condensed**, **Formula**, **Fischer**, and **Newman**.
@@ -72,7 +101,7 @@ Legacy offline examples remain available and are explicitly schematic, not assig
 
 ## Molecule builder
 
-For a ten-minute student lab and a repeatable visual review, see [Student walkthrough](STUDENT_WALKTHROUGH.md). The simulator’s **Predict & check** questions connect editing, 3D measurements, and stereochemistry.
+For a ten-minute student lab and a repeatable visual review, see [Student walkthrough](STUDENT_WALKTHROUGH.md). The simulator keeps notes about editing, angle measurements, and cis/trans examples under **How to read this view**.
 
 **2D simulator** opens a drag-and-drop sketchpad with single/double/triple bonds, benzene stamps, moving, deletion, Undo/Redo and explicit H. Click an element then tap to place/replace, or drag it from the palette. Choose a bond and drag between two atoms or tap both. Move mode drags atoms; dragging a bond moves both ends.
 

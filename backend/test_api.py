@@ -32,7 +32,7 @@ class APITests(unittest.TestCase):
         self.assertEqual(response.status_code,200)
         self.assertIn('id="stereo-explorer"',response.text)
         self.assertIn('Content-Security-Policy',response.headers)
-        for path in ['/chemistry-client.js','/molecule-record.js','/atom-inspection.js','/stereo.css','/workbench.css']:
+        for path in ['/chemistry-client.js','/molecule-record.js','/atom-inspection.js','/model-input.js','/model-stage.js','/model-desk.js','/benzene-view.js','/reaction-rules.js','/reaction-diagram.js','/reaction-addition.js','/reaction-aromatic.js','/reaction-substitution.js','/reaction-motifs.js','/reaction-library.js','/reaction-ui.js','/stereo.css','/workbench.css']:
             self.assertEqual(self.client.get(path).status_code,200)
         for path in ['/requirements.txt','/backend/chemistry_service.py','/.venv/pyvenv.cfg','/../README.md']:
             self.assertEqual(self.client.get(path).status_code,404)

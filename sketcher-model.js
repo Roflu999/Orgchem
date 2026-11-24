@@ -180,12 +180,21 @@
       else d.bonds.push({ a, b, order });
     });
   }
-  function removeAtom(draft, i) {
-    return edit(draft, d => {
-      index(i, d.atoms.length); d.atoms.splice(i, 1);
-      d.bonds = d.bonds.filter(v => v.a !== i && v.b !== i).map(v => ({ ...v, a: v.a > i ? v.a - 1 : v.a, b: v.b > i ? v.b - 1 : v.b }));
+  function removeAtoms(draft, indices) {
+    const d = checked(draft), removed = new Set(), remap = [];
+    if (!Array.isArray(indices)) throw Error('Atom indices must be an array.');
+    for (let j = 0; j < indices.length; j++) {
+      const i = item(indices, j); index(i, d.atoms.length); removed.add(i);
+    }
+    const atoms = [];
+    d.atoms.forEach((atom, i) => {
+      if (!removed.has(i)) { remap[i] = atoms.length; atoms.push(atom); }
     });
+    const bonds = d.bonds.filter(b => !removed.has(b.a) && !removed.has(b.b))
+      .map(b => ({ ...b, a: remap[b.a], b: remap[b.b] }));
+    return { ...d, atoms, bonds };
   }
+  function removeAtom(draft, i) { return removeAtoms(draft, [i]); }
   function removeBond(draft, a, b) {
     return edit(draft, d => {
       edge(a, b, 1, d.atoms.length);
@@ -262,7 +271,7 @@
       return { valid: true, graphToDraft, message: structure.knownName ? 'Valid structure. Unused heavy-atom valences are filled with implicit hydrogens.' : 'Valid structure; no name in the offline name map.', structure, hydrogens };
     } catch (error) { return invalid(error.message); }
   }
-  const api = { empty, addAtom, moveAtom, elasticDrag, setElement, setCharge, setBond, removeAtom, removeBond, fromStructure, analyze, validate: checked, checked, toAdvanced, chemicalSignature, VAL, PERIODIC: Object.freeze([...PERIODIC]) };
+  const api = { empty, addAtom, moveAtom, elasticDrag, setElement, setCharge, setBond, removeAtom, removeAtoms, removeBond, fromStructure, analyze, validate: checked, checked, toAdvanced, chemicalSignature, VAL, PERIODIC: Object.freeze([...PERIODIC]) };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.MoleculeSketcher = api;
 })(typeof self !== 'undefined' ? self : globalThis);

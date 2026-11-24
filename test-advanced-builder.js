@@ -97,6 +97,47 @@ function browser(client) {
     const replaced=M.setBond(M.removeBond(d,0,1),0,1,1);assert.notEqual(replaced.bonds.at(-1).id,d.bonds[0].id);
     assert.equal(JSON.stringify(d),original);assert.deepEqual(changed.sourceRecord,d.sourceRecord);
   });
+  await test('tap and keyboard atom selection delete one mapped batch and Undo restores the exact draft',async()=>{
+    const b=browser(),source=freeze(record(['H','C','N','O','H'],[[0,1,1],[1,2,2],[2,3,1],[3,4,1]]));
+    b.api.showBuilder(source); const before=b.api.getDraft(),canvas=b.$('builder-canvas'),panel=b.$('builder-panel');
+    const atom=i=>canvas.children.find(g=>g.dataset.atom===String(i));
+    const tap=i=>{const event={target:atom(i),pointerType:'touch',pointerId:1,button:0,clientX:10,clientY:10};canvas.emit('pointerdown',event);canvas.emit('pointerup',event);};
+    b.$('builder-select-atoms').emit('click');assert(b.$('builder-delete').disabled);
+    tap(0);tap(2);tap(2);canvas.emit('keydown',{target:atom(4),key:' '});
+    assert.equal(atom(0).attributes['aria-pressed'],'true');assert.equal(atom(4).attributes['aria-pressed'],'true');
+    assert.equal(atom(2).attributes['aria-pressed'],'false');assert.match(b.$('builder-counts').textContent,/Selected atoms: 2/);
+    assert(b.$('builder-undo').disabled,'selecting atoms must not create history');
+    panel.emit('keydown',{target:b.document.createElement('input'),key:'Backspace'});assert.deepEqual(b.api.getDraft(),before);
+    panel.emit('keydown',{target:atom(1),key:'Backspace'}); // Focus is not an additional selection.
+    const after=b.api.getDraft();assert.deepEqual(after.atoms,before.atoms.slice(1,4));
+    assert.deepEqual(after.bonds,[{...before.bonds[1],a:0,b:1},{...before.bonds[2],a:1,b:2}]);
+    assert.deepEqual(after.sourceRecord,source);assert(b.$('builder-delete').disabled);
+    await b.tick();assert.deepEqual(b.requests[0].payload.draft,after);
+    panel.emit('keydown',{key:'z',ctrlKey:true});assert.deepEqual(b.api.getDraft(),before);assert(b.$('builder-undo').disabled);
+    b.$('builder-redo').emit('click');assert.deepEqual(b.api.getDraft(),after);
+    tap(0);b.$('builder-delete').emit('click');assert.deepEqual(b.api.getDraft().atoms,after.atoms.slice(1));
+  });
+  await test('Erase and focused Delete remain single-atom actions; leaving selection mode clears its targets',()=>{
+    const b=browser();b.api.showBuilder(Chem.resolveName('Ethanol'));const before=b.api.getDraft();
+    b.$('builder-select-atoms').emit('click');b.selectAtom(0);b.selectAtom(2);
+    b.$('builder-panel').emit('keydown',{key:'Escape'});assert(b.$('builder-delete').hidden);
+    const atom=b.$('builder-canvas').children.find(g=>g.dataset.atom==='1');
+    b.$('builder-panel').emit('keydown',{target:atom,key:'Delete'});assert.deepEqual(b.api.getDraft(),M.removeAtom(before,1));
+    b.$('builder-undo').emit('click');b.$('builder-erase').emit('click');b.selectAtom(2);assert.deepEqual(b.api.getDraft(),M.removeAtom(before,2));
+  });
+  await test('desk notation includes all validated fragments, waits for RDKit, and distinguishes invalid from empty',async()=>{
+    const b=browser(),updates=[];b.window.ModelDesk={updateApply(){updates.push(b.api.getDeskNotation());}};
+    b.api.showBuilder(Chem.resolveName('Propane'));const d=b.api.getDraft();
+    const middle=d.atoms.findIndex((_,i)=>d.bonds.filter(e=>e.a===i||e.b===i).length===2);
+    b.selectAtom(middle);b.$('builder-delete').emit('click');assert.equal(updates.at(-1),'C.C');
+    b.selectAtom(1);b.change('builder-replace-element','H');assert.equal(updates.at(-1),null);
+    b.change('builder-component',0);assert.equal(b.$('builder-name').textContent,'Methane');assert.equal(updates.at(-1),null);
+    b.api.showBuilder(record());assert.equal(updates.at(-1),null);await b.tick();
+    const reply=resultFor(b.requests[0].payload.draft);reply.molecules[0].notation='[13CH3]O';
+    b.requests[0].resolve(reply);await b.settle();assert.equal(updates.at(-1),'[13CH3]O');
+    b.$('builder-select-atoms').emit('click');[0,1,2].forEach(b.selectAtom);b.$('builder-delete').emit('click');
+    assert.equal(updates.at(-1),'');assert.deepEqual(b.api.getDraft().sourceRecord,record());
+  });
   await test('elastic drag moves bonded neighbors, leaves other fragments still, and preserves mapped chemistry',()=>{
     const d=freeze(M.fromStructure(record(['C','O','Cl'],[[0,1,1]])));
     const moved=M.elasticDrag(d,[0],50,12);

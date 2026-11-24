@@ -108,17 +108,18 @@ def student_walkthrough(page, captures=None):
     if captures:
         page.locator('#builder-title').evaluate("e=>e.scrollIntoView({block:'start'})")
         page.screenshot(path=str(captures / 'student-phone-builder.png'))
-    q = page.locator('.notebook details').nth(1)
+    q = page.locator('#sketch-guide')
+    expect(q.locator('dl')).to_be_hidden()
     q.locator('summary').press('Enter')
-    expect(q.locator('p')).to_be_visible()
+    expect(q.locator('dl')).to_be_visible()
     if captures:
-        page.locator('.notebook').screenshot(path=str(captures / 'student-practice.png'))
+        q.screenshot(path=str(captures / 'sketch-guide.png'))
     choose_language(page, 'ar')
-    expect(q.locator('p')).to_be_visible()
+    expect(q.locator('dl')).to_be_visible()
     assert not semantics(page)['overflow']
     assert page.evaluate('JSON.stringify(MoleculeBuilder.getDraft())') == draft
     choose_language(page, 'en')
-    print('PASS phone canvas, keyboard drawing tools, atom identity and localized practice', flush=True)
+    print('PASS phone canvas, keyboard drawing tools, atom identity and localized sketch guide', flush=True)
 
 
 def main():
@@ -148,6 +149,7 @@ def main():
         page.on('request', lambda request: jobs.append(request.url) if request.method=='POST' and '/api/v1/jobs' in request.url else None)
         try:
             page.goto(args.url,wait_until='domcontentloaded',timeout=30000)
+            page.locator('#show-stereo').click()
             expect(page.locator('#language-select option')).to_have_count(6)
             expect(page.locator('.stereo-variant')).to_have_count(2,timeout=20000)
             expect(page.locator('#stereo-make-conformers')).to_be_enabled()

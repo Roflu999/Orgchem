@@ -27,6 +27,7 @@ def main():
         page.on('pageerror',lambda e:errors.append(str(e)))
         page.on('console',lambda m:errors.append(m.text) if 'framebuffer is incomplete' in m.text.lower() else None)
         page.goto(args.url,wait_until='domcontentloaded',timeout=20000)
+        page.locator('#show-stereo').click()
         def wait_projection():
             try:expect(page.locator('#textbook-content img.linked-projection')).to_be_visible(timeout=20000)
             except Exception:
