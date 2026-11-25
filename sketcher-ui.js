@@ -52,9 +52,9 @@
     const warnings = [...new Set([...(response.warnings || []), ...(structure.warnings || [])])];
     return { valid:true, structure, hydrogens:snapshot.atoms.map(a => structure.hydrogens[map.get(a.id)] || 0), message:warnings.join(' ') || 'Validated by RDKit. Canvas positions never assign stereochemistry.', warnings, busy:false };
   }
-  let recovery;
+  let recovery, standalone = null;
   function identify(automaticExample = false) {
-    recovery?.changed(draft, automaticExample);
+    if (!standalone && initialized) recovery?.changed(draft, automaticExample);
     cancelAnalysis();
     if (isAdvanced()) {
       if (!draft.atoms.length) return advancedScene(pendingResult('Add an atom. This draft uses the RDKit server.'));
@@ -134,7 +134,17 @@
   function getDeskNotation() {
     if (!draft.atoms.length) return '';
     if (!scene.valid || !scene.components.length) return null;
-    const parts = scene.components.map(c => c.valid && c.structure?.notation);
+    const parts = scene.components.map(c => {
+      if(!c.valid)return null;
+      if(isAdvanced()||!c.indices.some(i=>draft.atoms[i].e==='H'))return c.structure?.sketchNotation||c.structure?.notation;
+      // Identity SMILES intentionally folds ordinary H; a row edit must reopen with all drawn atoms.
+      const index=new Map(c.indices.map((i,j)=>[i,j])), atoms=c.indices.map(i=>{
+        const a=draft.atoms[i],h=scene.hydrogens[i];
+        return a.e==='H'?'[H]':a.charge?'[C'+(h?'H'+(h>1?h:''):'')+'+]':a.e;
+      }), m=atoms.map(()=>atoms.map(()=>0));
+      for(const bond of draft.bonds)if(index.has(bond.a)){const a=index.get(bond.a),b=index.get(bond.b);m[a][b]=m[b][a]=bond.order;}
+      return Chem.smiles({atoms,m});
+    });
     return parts.every(s => typeof s === 'string' && s) ? parts.join('.') : null;
   }
   function updateIdentity() {
@@ -283,10 +293,39 @@
     if(Number.isInteger(last)&&moving())selection={kind:'atom',i:last};
     updateSelection();renderDrawing();
   });
-  function loadStructure(iso, isSample = false) {
-    let next=M.fromStructure(iso,iso.schema==='bond-atlas/3'?iso.layouts?.skeletal:app.geometry2D(iso));
-    if(next.atoms.some(a=>a.charge)&&next.engine!=='rdkit')next=M.toAdvanced(next);
-    installDraft(next, isSample);
+  function structureDraft(iso) {
+    const next=M.fromStructure(iso,iso.schema==='bond-atlas/3'?iso.layouts?.skeletal:app.geometry2D(iso));
+    return next.atoms.some(a=>a.charge)&&next.engine!=='rdkit'?M.toAdvanced(next):next;
+  }
+  function loadStructure(iso, isSample = false) { installDraft(structureDraft(iso), isSample); }
+  // Row edits have a private undo branch. Switching documents must not write to
+  // the independent simulator's recovery copy or keep an old conversion alive.
+  function captureEditor(){
+    return {draft:gesture?.before||draft,selection,history,future,preview,activeComponent,sample,initialized,tool,element,order};
+  }
+  function restoreEditor(state){
+    ({draft,selection,history,future,preview,activeComponent,sample,initialized,tool,element,order}=state);
+    gesture=null;anchor=null;pendingLine=null;
+    analysis=identify();message();fitDrawing();render();
+  }
+  function rowDraft(record,raw){
+    if(record.schema==='bond-atlas/3'||!raw.includes('[H]'))return structureDraft(record);
+    // The local preview folds ordinary H into its parent. Read the user's actual vertices for editing.
+    const graph=Chem.readSmiles(raw.replace(/^smiles\s*:\s*/i,''),{keepHydrogens:true}), bonds=[];
+    graph.m.forEach((r,a)=>r.forEach((order,b)=>{if(order&&a<b)bonds.push({a,b,order});}));
+    const input={atoms:graph.atoms,bonds,hydrogens:graph.atoms.map((e,i)=>M.VAL[e]-graph.m[i].reduce((a,b)=>a+b,0))};
+    return M.fromStructure(input,MoleculeGeometry.layout2D(input,false));
+  }
+  function enterRow(record,saved,raw){
+    const state=saved||{draft:rowDraft(record,raw),selection:null,history:[],future:[],preview:null,activeComponent:0,sample:false,initialized:true,tool:'move',element:'C',order:1};
+    standalone=captureEditor();
+    document.querySelector('.draft-recovery').hidden=document.querySelector('.recovery-reminder').hidden=true;
+    restoreEditor(state);
+  }
+  function leaveRow(){
+    const rowState=captureEditor(), previous=standalone;standalone=null;
+    document.querySelector('.draft-recovery').hidden=document.querySelector('.recovery-reminder').hidden=false;
+    restoreEditor(previous);return rowState;
   }
   function installDraft(next, isSample = false) {
     const initialExample = !initialized && isSample;
@@ -538,9 +577,7 @@
   function leaveSimulator(){
     if(analysis.busy){analysis=identify();message();render();} // Supersede an in-flight conversion with normal draft validation.
   }
-  $('show-explorer').addEventListener('click',()=>{leaveSimulator();showExplorer();});
-  $('show-stereo').addEventListener('click',leaveSimulator);
-  $('show-models').addEventListener('click',leaveSimulator);
+  $('show-explorer').addEventListener('click',showExplorer);
   $('edit-in-builder').addEventListener('click',()=>attempt(()=>{
     const selected=app.state.selected;
     if(!selected)return;
@@ -548,10 +585,12 @@
       if(isAdvanced()&&draft.sourceRecord!==selected){
         draft={...draft,sourceRecord:selected};preview.draft=draft;analysis=identify();
       }else if(preview.records.length>1){
-        activeComponent=scene.components.findIndex(c=>c.structure===selected);selection=null;
+        activeComponent=preview.links.get(selected).component;selection=null;
       }
       showBuilder();
     }else{
+      // An unrelated viewer selection starts a different document, not a replacement for the desk row.
+      window.ModelDesk?.suspendEditor?.();
       showBuilder(selected);
       // fromStructure copies atoms in source order. Other legacy previews instead
       // pass through canonicalization, for which openViewer records an explicit map.
@@ -660,5 +699,5 @@
   $('builder-ideal').addEventListener('click',()=>attempt(tidyAngles));
   new ResizeObserver(()=>{if(!$('builder-panel').hidden&&initialized){fitDrawing();renderDrawing();}}).observe(svg);
   recovery = window.AtlasDraftRecovery?.attach(() => draft, installDraft);
-  window.MoleculeBuilder={showBuilder,showExplorer,loadStructure,openViewer,getDeskNotation,getDraft:()=>M.checked(draft)};
+  window.MoleculeBuilder={showBuilder,showExplorer,loadStructure,enterRow,leaveRow,leaveSimulator,openViewer,getDeskNotation,getDraft:()=>M.checked(draft)};
 })();

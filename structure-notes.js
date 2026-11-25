@@ -11,7 +11,7 @@
   }
   document.addEventListener('bondatlas:selection', event => {
     const m = event.detail.molecule, toolkit = MoleculeRecords.isRecord(m);
-    const info = toolkit ? m.structureInsights : Chem.offlineInsights(m);
+    const info = !m ? null : toolkit ? m.structureInsights : Chem.offlineInsights(m);
     const panel = $('structure-notes'); panel.hidden = !info;
     if (!info) return; // Older toolkit records must not be interpreted as neutral offline graphs.
     const groups = $('notes-groups'), sites = $('notes-sites');

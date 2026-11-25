@@ -50,6 +50,14 @@ jobs:
           for test in test.js test-*.js; do
             node "$test"
           done
+      - name: Cross-feature regressions with local RDKit and DOM controls
+        run: |
+          npm --prefix browser-check ci --ignore-scripts --no-audit --no-fund
+          node browser-check/row-compare.mjs
+          node browser-check/import-interactions.mjs
+          node test-workspace-file.js --desk
+          node test-model-input.js --rdkit
+          .venv/bin/python browser-check/run-live-dom.py
       - name: Validate the launcher against the installed runtime
         run: python run_local.py --setup-only
 
@@ -112,8 +120,9 @@ jobs:
           # No sandbox-disabling flags, privileged browser, or host-security changes.
           url = "http://127.0.0.1:8765"
           Path("/tmp/bond-atlas-browser").mkdir(parents=True, exist_ok=True)
-          for suite in ("browser_smoke.py", "browser_integration.py", "browser_ui.py"):
-              print(f"Running {suite} against a fresh local server", flush=True)
+          for suite in (["browser_ui.py", "--reaction-phone", "--capture", "--screenshots", "browser-results/reaction-phone"],
+                        ["browser_smoke.py"], ["browser_integration.py"], ["browser_ui.py"]):
+              print(f"Running {' '.join(suite)} against a fresh local server", flush=True)
               server = subprocess.Popen([
                   sys.executable, "serve.py", "--host", "127.0.0.1", "--port", "8765"
               ])
@@ -131,7 +140,7 @@ jobs:
                       if time.monotonic() >= deadline:
                           raise RuntimeError("Local test server did not become ready in 30 seconds")
                       time.sleep(0.25)
-                  subprocess.run([sys.executable, suite, "--url", url], check=True, timeout=360)
+                  subprocess.run([sys.executable, *suite, "--url", url], check=True, timeout=360)
               finally:
                   # Clean up only the process this suite created, even on test failure.
                   if server.poll() is None:
@@ -142,3 +151,11 @@ jobs:
                       server.kill()
                       server.wait()
           PY
+      - name: Keep the reaction-phone screenshot
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-reaction-phone
+          path: browser-results/reaction-phone/*.png
+          if-no-files-found: ignore
+          retention-days: 7

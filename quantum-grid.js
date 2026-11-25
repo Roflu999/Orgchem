@@ -67,6 +67,6 @@
     }catch(e){message(()=>detail(e.message));}
   });
   $('quantum-grid-clear').addEventListener('click',()=>{readRevision++;clear();message(()=>(tr("grid.removed",'Supplied grid removed.')));});
-  document.addEventListener('bondatlas:selection',()=>{if(key&&key!==MoleculeRecords.cacheKey(app.state.selected)){clear();message(()=>(tr("grid.selectionChanged",'Grid removed because the selected chemical state or conformer changed.')));}});
+  document.addEventListener('bondatlas:selection',()=>{if(key&&(!app.state.selected||key!==MoleculeRecords.cacheKey(app.state.selected))){clear();message(()=>(tr("grid.selectionChanged",'Grid removed because the selected chemical state or conformer changed.')));}});
   document.addEventListener('bondatlas:scene',()=>{if(app.state.together&&shapes.length){clear();message(()=>(tr("grid.togetherRemoved",'Grid removed in Together view.')));}});
 })(typeof window!=='undefined'?window:globalThis);

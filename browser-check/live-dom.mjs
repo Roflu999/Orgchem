@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Script } from 'node:vm';
+import { checkPlates } from './plate-bench.mjs';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
 const port = process.argv[2] ?? '8000';
@@ -79,14 +80,44 @@ try {
     select('desk-benz',mode);assert(decodeURIComponent(doc.querySelector('#desk-stage img').src).includes(`data-benzene-mode="${mode}"`));
     assert.equal(firstRow.querySelector('.row-formula').textContent,'C₆H₆');
   }
+  const benzeneImage=doc.querySelector('#desk-stage img');select('language-select','ar');
+  assert(benzeneImage.alt.includes(w.AtlasI18n.t('benz.cloud')),'translate the current benzene mode without replacing the image');
+  select('language-select','en');
   el('desk-undo').click();assert.equal(firstRow.querySelector('input').value,source);assert(el('desk-benz-wrap').hidden);
   el('show-reagents').click();assert(!el('reaction-panel').hidden);assert(el('model-desk').hidden);assert(el('explorer-panel').hidden);
+  await checkPlates({w,el,select,until});
   const examples=Array.from(doc.querySelectorAll('#rx-catalog-list button'));
   for(const example of examples){example.click();assert(!el('rx-result').hidden,example.dataset.example);assert(el('rx-products').textContent.trim());
     for(let i=0;!el('rx-next').disabled&&i<15;i++){el('rx-next').click();assert(el('rx-equation').textContent.trim());}
     assert(el('rx-next').disabled&&el('rx-step-title').textContent==='Products',example.dataset.example);
   }
-  const nitrate=examples.find(b=>b.dataset.example==='benzene-nitration');nitrate.click();select('rx-benz','cloud');
+  const exampleById=id=>examples.find(b=>b.dataset.example===id);
+  exampleById('hydroxide-sn2').click();assert.match(el('rx-products').textContent,/ethanol/i);
+  select('rx-setup','ethanolic');assert(el('rx-result').hidden);assert.equal(el('rx-products').textContent,'');
+  el('rx-run').click();assert.equal(el('rx-path').value,'haloalkane-elimination');assert.match(el('rx-products').textContent,/CH2=CH2/);
+  select('rx-setup','aqueous');el('rx-run').click();el('rx-use-product').click();assert(el('rx-result').hidden);
+  select('rx-reagent','Acidified potassium dichromate(VI)');assert(el('rx-run').disabled);select('rx-setup','distil');el('rx-run').click();assert.match(el('rx-products').textContent,/ethanal/i);
+  select('rx-setup','reflux');el('rx-run').click();assert.match(el('rx-products').textContent,/ethanoic acid/i);
+  el('rx-substrate').value='CC(C)(O)C';el('rx-substrate').dispatchEvent(new w.Event('input',{bubbles:true}));el('rx-run').click();assert(el('rx-result').hidden);assert.match(el('rx-empty').textContent,/no hydrogen/i);
+  exampleById('radical-chlorination').click();select('rx-setup','dark');el('rx-run').click();assert(el('rx-result').hidden);assert.match(el('rx-empty').textContent,/no radical chain/i);
+  console.log('PASS: switching conditions, chaining substitution into oxidation, and unsupported tertiary/dark setups');
+  // Reading lists narrow examples without mutating an active experiment.
+  el('rx-try-elimination').click();const alkeneNames=Array.from(el('rx-outcome').options,o=>o.textContent);
+  assert.equal(alkeneNames.length,3);assert(alkeneNames.some(s=>s.includes('(E)-but-2-ene')));assert(alkeneNames.some(s=>s.includes('(Z)-but-2-ene')));
+  select('rx-outcome','1');const beforeSwitch=el('rx-products').textContent;
+  el('rx-map-details').open=true;await until(()=>el('rx-site-map').querySelectorAll('circle.rx-mark').length===3,'marked alpha, beta and leaving atom');
+  for(const course of w.ReactionGuide.courses){select('rx-course',course.id);
+    assert.deepEqual(Array.from(el('rx-catalog-list').querySelectorAll('button'),b=>b.dataset.example).sort(),Array.from(course.entries).sort());
+    assert.equal(el('rx-products').textContent,beforeSwitch);assert(el('rx-reference').href.startsWith('https://'));}
+  assert(!el('rx-challenges').hidden);assert.equal(el('rx-problems').querySelectorAll('article').length,w.ReactionGuide.challenges.length);
+  for(const article of el('rx-problems').querySelectorAll('article')){article.querySelector('button').click();assert(!el('rx-result').hidden);assert(el('rx-reasoning').textContent.trim());}
+  select('rx-course','all');el('rx-try-oxidation').click();assert.equal(el('rx-outcome').options.length,2);
+  const oxFirst=el('rx-products').textContent;select('rx-outcome','1');assert.notEqual(el('rx-products').textContent,oxFirst);
+  el('rx-use-product').click();assert(el('rx-result').hidden);el('rx-run').click();assert(!el('rx-result').hidden,'remaining primary OH must still react');
+  el('rx-substrate').value='CC=CCC';el('rx-substrate').dispatchEvent(new w.Event('input',{bubbles:true}));select('rx-reagent','Hydrogen bromide');select('rx-setup','room');el('rx-run').click();
+  assert.equal(el('rx-outcome').options.length,2);const regio=el('rx-products').textContent;select('rx-outcome','1');assert.notEqual(el('rx-products').textContent,regio);
+  console.log('PASS: course-specific lesson lists, Olympiad problems, site maps, E/Z branches, sequential site selection and addition regioisomers');
+  const nitrate=Array.from(el('rx-catalog-list').querySelectorAll('button')).find(b=>b.dataset.example==='benzene-nitration');nitrate.click();select('rx-benz','cloud');
   assert(decodeURIComponent(el('rx-structure').querySelector('img').src).includes('data-benzene-mode="cloud"'));
   for(let i=0;i<3;i++)el('rx-next').click();assert(el('rx-benz-wrap').hidden);assert.deepEqual(errors,[]);assert.equal(el('rx-svg').querySelectorAll('[data-electrons="2"]').length,2,el('rx-heading').textContent+' / '+el('rx-step-title').textContent+' / '+el('rx-svg').innerHTML.slice(0,200));
   el('rx-substrate').value='N[C@@H](C)C(=O)O';el('rx-substrate').dispatchEvent(new w.Event('input',{bubbles:true}));assert(el('rx-result').hidden);assert.equal(el('rx-products').textContent,'');
@@ -161,11 +192,51 @@ try {
   assert.equal(before[2].querySelector('.row-formula').textContent,'C₄H₉F');
   // At capacity, undo the later additions before undoing a deletion; no rows are lost or overwritten.
   el('desk-2d').click();assert.equal(el('desk-status').textContent,'Models shown: 2');
-  el('desk-all').click();el('desk-remove-picked').click();assert.equal(el('desk-status').textContent,'No models to display');
+  if (!el('desk-all').checked) el('desk-all').click();
+  el('desk-remove-picked').click();assert.equal(el('desk-status').textContent,'No models to display');
   for(let i=0;i<8;i++)el('desk-add').click();assert(el('desk-add').disabled);
   for(let i=0;i<9;i++)undo.click();assert.deepEqual(rows(),before);
   for(let i=0;i<9;i++)redo.click();assert.equal(rows().length,8);assert(el('desk-add').disabled);
   console.log('PASS: bounded-list undo/redo, pending cancellation on redo, text shortcut isolation, per-row atom edits and validated chiral conformers');
+  // Follow the same path a visitor takes, including a real FileReader round-trip.
+  for (const starter of ['oxygen','chain','mirror']) {
+    el('desk-starter-'+starter).click();
+    assert.equal(rows().length,2);assert(rows().every(r=>r.querySelector('input[type=checkbox]').checked));
+    assert(!el('desk-comparison-note').hidden && !el('desk-comparison-note').open);
+    assert.equal(images(),2);
+    for(const image of doc.querySelectorAll('#desk-stage img')) assert.match(decodeURIComponent(image.src), /data-comparison-focus/);
+    el('desk-comparison-note').querySelector('summary').click();assert(el('desk-comparison-why').textContent.trim());
+  }
+  // A recognized pair remains comparable in 2D even when neither 3D conformer exists.
+  // Exercise actual desk scheduling/selection, not just a direct call to the stage.
+  const comparisonStatus=el('desk-comparison-status'), grid=doc.querySelector('#desk-stage .model-stage-2d');
+  w.ModelInput.resolve=async text=>({record:w.ModelComparisons.mirrorPreview(text),geometry:null,reason:'no-conformer'});
+  try {
+    el('desk-3d').click();
+    await until(()=>rows().every(r=>!r.querySelector('.row-actions button:last-child').hidden),'both mirror rows lack 3D coordinates');
+    assert.equal(el('desk-3d').getAttribute('aria-pressed'),'true');assert.equal(images(),0);
+    assert.equal(grid.style.display,'none','do not leave an empty 2D stage active in 3D mode');
+    assert.equal(comparisonStatus.textContent,w.AtlasI18n.t('compare.noGeometry'));
+    select('language-select','ar');assert.match(comparisonStatus.textContent,/\p{Script=Arabic}/u);
+    el('desk-2d').click();assert.equal(images(),2);
+    for(const label of doc.querySelectorAll('#desk-stage figcaption'))assert.match(label.textContent,/\p{Script=Arabic}/u);
+    const pick=rows()[1].querySelector('input[type=checkbox]');pick.click();assert(el('desk-comparison-note').hidden);
+    assert(![...grid.querySelectorAll('img')].some(img=>decodeURIComponent(img.src).includes('data-comparison-focus')));
+    pick.click();assert.equal(grid.querySelectorAll('figcaption').length,2);
+    select('language-select','en');assert.equal(comparisonStatus.textContent,w.AtlasI18n.t('compare.legend2d'));
+  } finally {w.ModelInput.resolve=originalResolve;}
+  let saved;
+  w.URL.createObjectURL=blob=>{saved=blob;return 'blob:'+origin+'/workspace';};w.URL.revokeObjectURL=()=>{};
+  // jsdom has no download manager. Capture only the download click, not normal events.
+  const preventDownload=e=>{if(e.target.closest('a[download]'))e.preventDefault();};
+  doc.addEventListener('click',preventDownload);el('desk-file-download').click();doc.removeEventListener('click',preventDownload);
+  assert(saved?.size>0);el('desk-starter-oxygen').click();
+  Object.defineProperty(el('desk-file-input'),'files',{configurable:true,value:[new w.File([saved],'workspace.orgchem.json',{type:'application/json'})]});
+  el('desk-file-input').dispatchEvent(new w.Event('change'));
+  await until(()=>rows().every(r=>r.querySelector('.row-head > input').value.includes('@')),'restore the saved mirror pair');
+  assert(!el('desk-comparison-note').hidden);assert(rows().every(r=>r.querySelector('input[type=checkbox]').checked));
+  undo.click();assert(!rows()[0].querySelector('.row-head > input').value.includes('@'));
+  console.log('PASS: all three curated highlights, on-demand explanations and local workspace file round-trip with undo');
   el('show-stereo').click();
   await until(() => doc.querySelectorAll('.stereo-variant').length === 2, 'two real RDKit lactic-acid variants');
   assert.equal(el('show-stereo').getAttribute('aria-pressed'), 'true');
@@ -238,6 +309,36 @@ try {
     }
     console.log('PASS: OPSIN resolves both stereochemical names in the live name field, with distinct R and S assignments');
   } else if (process.env.REQUIRE_OPSIN === '1') throw Error('Local OPSIN engine unavailable');
+  const dialog=el('import-dialog');dialog.showModal??=()=>{dialog.open=true;};dialog.close??=()=>{dialog.open=false;};
+  el('open-import').click();el('import-format').value='auto';el('import-text').value='[nH]1cccc1';el('apply-import').click();
+  await until(()=>!dialog.open,'import bracket SMILES via RDKit');
+  assert.equal(w.BondAtlas.state.selected.formula,'C4H5N');
+  w.BondAtlas.setMode('formula');select('group-filter','ester');assert.equal(w.BondAtlas.state.selected,null);
+  assert.equal(w.StereoExplorer.selectedMolecule(),null,'empty result filter must clear linked stereo selection');
+  assert(el('stereo-use-current').disabled && el('stereo-detail').hidden);
+  select('language-select','de');select('group-filter','all');
+  assert.equal(w.StereoExplorer.selectedMolecule().id,w.BondAtlas.state.selected.id);
+  assert(!el('stereo-use-current').disabled);assert.deepEqual(errors,[]);
+  console.log('PASS: bracket SMILES import, empty filter clears linked controls, and reselection after locale change');
+  // Preparing coordinates is a view action, not a new search. Exercise the chemistry jobs without a GPU.
+  const app=w.BondAtlas, oldRenderFailed=app.state.renderFailed;
+  el('open-import').click();el('import-format').value='smiles';el('import-text').value='CCO\nCCCO\nCOC';el('apply-import').click();
+  await until(()=>!dialog.open,'import a mixed collection');
+  try {
+    app.state.renderFailed=false;select('group-filter','alcohol');assert.equal(app.state.filtered.length,2);
+    const originalJob=w.ChemistryClient.job;let release,signal;
+    try {
+      w.ChemistryClient.job=(_op,_payload,opts)=>{signal=opts.signal;return new Promise((_,reject)=>{release=reject;});};
+      const pendingComparison=app.setTogether(true);select('group-filter','all');assert(signal.aborted);
+      release(Error('late failure from old filter'));await pendingComparison;assert(el('form-error').hidden);
+    } finally {w.ChemistryClient.job=originalJob;}
+    select('group-filter','alcohol');await app.setTogether(true);assert.equal(app.state.result.isomers.length,3,'Together must not discard filtered-out molecules');
+    assert.equal(el('group-filter').value,'alcohol');assert.equal(app.state.filtered.length,2);
+    assert(app.state.filtered.every(r=>w.MoleculeRecords.geometry(r)));
+    select('group-filter','all');assert.equal(app.state.filtered.length,3);
+    assert.deepEqual(errors,[]);
+  } finally {app.state.renderFailed=oldRenderFailed;}
+  console.log('PASS: Together prepares real conformers without replacing the collection or filter');
 } finally {
   w.close();
 }

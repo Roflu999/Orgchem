@@ -58,7 +58,7 @@
     return models;
   }
 
-  function schematic(record, ink) {
+  function schematic(record, ink, mark, accent) {
     let layout = layoutCache.get(record);
     if (!layout) {
       layout = root.MoleculeGeometry.layout2D(record, false); layoutCache.set(record, layout);
@@ -85,8 +85,48 @@
     const w = Math.max(...xs)-x+22, h = Math.max(...ys)-y+17;
     // The SVG is an image document (not markup injected into the page).
     const color = ink.replace(/["<>&]/g, '');
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}" width="${w*1.5}" height="${h*1.5}"><path d="${paths.join(' ')}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/><g fill="${color}" font-family="sans-serif" font-size="16" font-weight="600" text-anchor="middle" dominant-baseline="central">` +
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}" width="${w*1.5}" height="${h*1.5}">${mark?root.ModelComparisons.schematicMarks(mark,record,xs,ys,accent):''}<path d="${paths.join(' ')}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/><g fill="${color}" font-family="sans-serif" font-size="16" font-weight="600" text-anchor="middle" dominant-baseline="central">` +
       labels.map((s,i) => s ? `<text x="${xs[i]}" y="${ys[i]}">${s}</text>` : '').join('') + '</g></svg>';
+  }
+
+  // RDKit's stereo illustration may omit explicit H and need not share the
+  // sketch's coordinates or numbering. Draw a separate connectivity detail;
+  // never place a guessed overlay on that illustration.
+  function localDrawing(record, atom, ink, accent) {
+    const edges = record.bonds, neighbors = [];
+    for (const {a,b} of edges) {
+      if (a===atom) neighbors.push(b); else if (b===atom) neighbors.push(a);
+    }
+    const reach = Math.max(66, neighbors.length*9), points = new Map([[atom,[0,0]]]);
+    const adjacent = new Set(neighbors), closed = edges.some(({a,b}) => adjacent.has(a) && adjacent.has(b));
+    // In three-membered rings, do not run the closing bond through the selected atom.
+    const ring = closed ? [atom,...neighbors] : neighbors;
+    ring.forEach((i,k) => {
+      const angle = k*2*Math.PI/ring.length;
+      points.set(i,[reach*Math.cos(angle),reach*Math.sin(angle)]);
+    });
+    const paths = [], labels = [], bonds = [];
+    for (const {a,b,order} of edges) {
+      if (!points.has(a) || !points.has(b)) continue;
+      const [x,y] = points.get(a), [X,Y] = points.get(b), len = Math.hypot(X-x,Y-y) || 1;
+      const u = (X-x)/len, v = (Y-y)/len;
+      for (let k=0;k<order;k++) {
+        const n = (k-(order-1)/2)*3.5;
+        paths.push(`M${x+u*23-v*n} ${y+v*23+u*n}L${X-u*23-v*n} ${Y-v*23+u*n}`);
+      }
+      bonds.push(`${record.atoms[a]}${a+1}–${record.atoms[b]}${b+1} (${['','single','double','triple'][order]})`);
+    }
+    for (const [i,[x,y]] of points) {
+      const e = /^[A-Z][a-z]?$/.test(record.atoms[i]) ? record.atoms[i] : '?';
+      const isotope = Number.isInteger(record.isotopes?.[i]) && record.isotopes[i] || '';
+      const q = Number.isInteger(record.charges?.[i]) ? record.charges[i] : 0;
+      const symbol = isotope+e+(q ? (Math.abs(q)>1?Math.abs(q):'')+(q>0?'+':'−') : '');
+      labels.push(`<g transform="translate(${x} ${y})">${i===atom?`<circle r="23" fill="none" stroke="${accent}" stroke-width="3"/>`:''}<text y="-1" font-weight="650">${symbol}</text><text y="13" font-size="11">#${i+1}</text></g>`);
+    }
+    const xs = [...points.values()].map(p=>p[0]), ys = [...points.values()].map(p=>p[1]);
+    const x = Math.min(...xs)-36, y = Math.min(...ys)-35, w = Math.max(...xs)-x+36, h = Math.max(...ys)-y+35;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}" width="${w*2}" height="${h*2}"><path d="${paths.join(' ')}" fill="none" stroke="${ink}" stroke-width="2"/><g font-family="sans-serif" font-size="16" text-anchor="middle" fill="${ink}">${labels.join('')}</g></svg>`;
+    return {svg,alt:`Connectivity around ${record.atoms[atom]}${atom+1}: ${bonds.join(', ') || 'no bonds'}.`};
   }
 
   // 2.4.2 has no viewer destructor: its constructor registers anonymous bound
@@ -160,11 +200,11 @@
         // including detached/hidden viewers, even after intentional destruction.
         canvas.addEventListener('webglcontextlost', event => {
           event.preventDefault(); event.stopImmediatePropagation();
-          if (!destroyed && viewer===active) { dirty=true; report(Error('Molecule viewer lost its WebGL context.')); }
+          if (!destroyed && viewer===active && mode==='3d' && entries.length) { dirty=true; report(Error('Molecule viewer lost its WebGL context.')); }
         }, true);
         canvas.addEventListener('webglcontextrestored', () => {
           if (destroyed || viewer!==active) return;
-          try { releaseViewer(); if (mode==='3d') { ensureViewer(); dirty=true; refresh(); } }
+          try { releaseViewer(); if (mode==='3d' && entries.length) { ensureViewer(); dirty=true; refresh(); } }
           catch (e) { report(e); }
         }, {once:true});
       } catch (e) {
@@ -173,9 +213,10 @@
         if (hidden) { frame.prepend(pane); pane.style.cssText = css; }
       }
     }
-    function fit3D() {
-      if (!models.length) return;
-      const q = viewer.getView().slice(4,8), points = models.flatMap(m => m.map(a => rotate(xyz(a),q)));
+    let colors = {}, accent;
+    function fit3D(atoms = models.flat()) {
+      if (!atoms.length) return;
+      const q = viewer.getView().slice(4,8), points = atoms.map(a => rotate(xyz(a),q));
       const {mid,span} = bounds(points), center = rotate(mid,inverse(q));
       // 3Dmol 2.4.2's orthographic right plane is distance*tan(fov),
       // and top is right/aspect. Fit the union with one camera transformation.
@@ -184,6 +225,24 @@
       const slab = Math.hypot(...span) + 4;
       viewer.setSlab(-slab,slab);
       viewer.setView([...center.map(x => -x),viewer.CAMERA_Z-distance,...q,0,0]);
+    }
+    function styleAndFrame() {
+      const stick = {radius:.11, colorscheme:colors}, normal = {stick,sphere:{radius:.36,colorscheme:colors}};
+      const hydrogen = {stick,sphere:{radius:.2,colorscheme:colors}}, marked = {stick,sphere:{radius:.53,color:accent}};
+      const i = entries.length===1 ? entries[0].focusAtom : null;
+      if (Number.isInteger(i) && models[0]?.[i]) {
+        const indices = [i,...models[0][i].bonds];
+        viewer.setStyle({},{}); // Hide distant atoms, but keep their mapped indices and coordinates.
+        viewer.setStyle({model:0,index:indices},normal);
+        viewer.setStyle({model:0,index:indices,elem:'H'},hydrogen);
+        viewer.setStyle({model:0,index:i},marked);
+        fit3D(indices.map(j=>models[0][j]));
+      } else {
+        viewer.setStyle({},normal); viewer.setStyle({elem:'H'},hydrogen);
+        entries.forEach(({mark},model)=>{if(mark)viewer.setStyle({model,index:mark.atom},marked);});
+        fit3D();
+      }
+      viewer.render();
     }
     function refresh() {
       if (destroyed) return;
@@ -196,11 +255,14 @@
         grid.style.gridTemplateColumns = `repeat(${cols},minmax(0,1fr))`;
         grid.style.gridTemplateRows = `repeat(${Math.ceil(entries.length/cols)||1},minmax(0,1fr))`;
       } else if (viewer) {
-        if (viewer.getRenderer().isLost()) throw Error('Molecule viewer WebGL context is unavailable.');
+        if (viewer.getRenderer().isLost()) {
+          if (entries.length) throw Error('Molecule viewer WebGL context is unavailable.');
+          releaseViewer(); dirty=false; return;
+        }
         viewer.resize();
         models = entries.length ? pack(entries,w/h,viewer.getView().slice(4,8)) : [];
         viewer.removeAllModels();
-        const theme = win.getComputedStyle(host), colors = {};
+        const theme = win.getComputedStyle(host); colors = {};
         for (const atoms of models) {
           for (const a of atoms) if (!(a.elem in colors)) {
             const token = theme.getPropertyValue('--atom-'+a.elem).trim();
@@ -208,10 +270,8 @@
           }
           viewer.addModel().addAtoms(atoms);
         }
-        const stick = {radius:.11, colorscheme:colors};
-        viewer.setStyle({},{stick,sphere:{radius:.36,colorscheme:colors}});
-        viewer.setStyle({elem:'H'},{stick,sphere:{radius:.2,colorscheme:colors}});
-        fit3D(); viewer.render();
+        accent=theme.getPropertyValue('--accent-ink').trim()||'#657981';
+        styleAndFrame();
       }
       dirty = false;
     }
@@ -233,12 +293,20 @@
       draw2D(rows, benzeneMode) {
         if (destroyed) return;
         const theme = win.getComputedStyle(host), ink = theme.getPropertyValue('--ink').trim() || theme.color || '#172b3a';
-        const images = rows.map(({record,id}) => {
+        const accent=theme.getPropertyValue('--accent-ink').trim()||ink;
+        const images = rows.map(({record,id,mark,focusAtom}) => {
           const benzene=benzeneMode&&root.BenzeneView?.matches(record);
-          const svg = benzene ? root.BenzeneView.svg(benzeneMode,ink) : record.schema==='bond-atlas/3' ? root.MoleculeRecords.themedSVG(record.depictions?.skeletal,ink) : schematic(record,ink);
-          const img = doc.createElement('img'); img.alt = benzene ? 'Benzene · '+root.AtlasI18n.t('benz.'+benzeneMode) : record.name || record.formula || String(id);
+          const detail = Number.isInteger(focusAtom) && record.atoms[focusAtom] ? localDrawing(record,focusAtom,ink,accent) : null;
+          const svg = detail ? detail.svg : mark ? (root.ModelComparisons.mirrorDrawing(mark,ink,accent)||schematic(record,ink,mark,accent)) : benzene ? root.BenzeneView.svg(benzeneMode,ink) : record.schema==='bond-atlas/3' ? root.MoleculeRecords.themedSVG(record.depictions?.skeletal,ink) : schematic(record,ink);
+          const img = doc.createElement('img');
+          if(benzene)root.AtlasI18n.bindAttr(img,'alt','benz.depiction',()=>({mode:root.AtlasI18n.t('benz.'+benzeneMode)}));
+          else img.alt=detail?.alt || record.name || record.formula || String(id);
           img.style.cssText='width:100%;height:100%;min-width:0;min-height:0;object-fit:scale-down;';
-          img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg); return img;
+          img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+          if(!mark)return img;
+          const tile=doc.createElement('figure'),caption=doc.createElement('figcaption');
+          tile.className='comparison-tile';caption.dir='auto';root.AtlasI18n.bindText(caption,'compare.row',()=>({n:id,detail:root.AtlasI18n.t('compare.'+mark.side)}));
+          tile.append(img,caption);return tile;
         });
         grid.replaceChildren(...images); show('2d',rows);
       },
@@ -251,10 +319,23 @@
         pane.role = 'img'; pane.ariaLabel = rows.map(({record,id}) => record.name || record.formula || String(id)).join(', ');
         grid.replaceChildren(); show('3d',rows);
       },
+      focusAtom(i) {
+        if (destroyed || mode!=='3d' || entries.length!==1) return;
+        if (i!==null && !(Number.isInteger(i) && entries[0].geometry.atoms[i])) return;
+        entries[0] = {...entries[0],focusAtom:i};
+        if (frame.clientWidth && frame.clientHeight && models.length) styleAndFrame();
+      },
       fit() {
         if (destroyed) return;
         if (mode==='2d') { scale = 1; grid.style.transform=''; }
-        else if (frame.clientWidth && frame.clientHeight && viewer) { refresh(); fit3D(); }
+        else if (frame.clientWidth && frame.clientHeight && viewer) {
+          if (Number.isInteger(entries[0]?.focusAtom)) this.focusAtom(null);
+          else { refresh(); fit3D(); }
+        }
+      },
+      rotate(degrees, axis) {
+        if (!destroyed && mode==='3d' && viewer && Number.isFinite(degrees) && ['x','y','z'].includes(axis))
+          viewer.rotate(degrees, axis);
       },
       zoom(factor) {
         if (destroyed || !Number.isFinite(factor) || factor<=0) return;

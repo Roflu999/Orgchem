@@ -2,10 +2,10 @@
 (function(root){
   'use strict';
   const $=id=>document.getElementById(id), I=root.AtlasI18n, input=root.ModelInput;
-  const rows=[], cache=new Map(), maxRows=8, maxJobs=2;
+  const files=root.WorkspaceFile, rows=[], cache=new Map(), maxRows=files.maxRows, maxJobs=2;
   let stage,active=false,mode='2d',nextId=1,running=0,lastDraw=null,webglError=false;
   const past=[], future=[], historyLimit=32;
-  let typing=null, editing=null;
+  let typing=null, editing=null, deskRevision=0;
   const text=(el,key,params={})=>I.bindText(el,key,params);
   const fmt=n=>n.toLocaleString(I.locale,{maximumFractionDigits:2,minimumFractionDigits:2});
   function element(tag,cls){const el=document.createElement(tag);if(cls)el.className=cls;return el;}
@@ -62,14 +62,14 @@
   }
   function draw(force=false){
     if(!active)return;
-    const entries=[];
-    for(const row of rows){const record=row.result?.record||row.preview,geometry=row.result?.geometry;if(row.visible&&record&&(mode==='2d'||geometry))entries.push({id:row.id,record,geometry});}
+    const entries=[], marks=compareSelection(rows,mode);
+    for(const row of rows){const record=row.result?.record||row.preview,geometry=row.result?.geometry;if(row.visible&&record&&(mode==='2d'||geometry))entries.push({id:row.id,record,geometry,mark:marks.get(row.id)});}
     const benzene=mode==='2d'&&entries.some(e=>root.BenzeneView.matches(e.record));
     $('desk-benz-wrap').hidden=$('desk-benz-note').hidden=!benzene;
     if(benzene)text($('desk-benz-note'),'benz.note.'+$('desk-benz').value);
-    const same=lastDraw&&lastDraw.mode===mode&&entries.length===lastDraw.entries.length&&entries.every((e,i)=>e.id===lastDraw.entries[i].id&&e.record===lastDraw.entries[i].record&&e.geometry===lastDraw.entries[i].geometry);
+    const same=lastDraw&&lastDraw.mode===mode&&entries.length===lastDraw.entries.length&&entries.every((e,i)=>e.id===lastDraw.entries[i].id&&e.record===lastDraw.entries[i].record&&e.geometry===lastDraw.entries[i].geometry&&e.mark===lastDraw.entries[i].mark);
     if(force||!same){
-      if(mode==='3d'&&entries.length){
+      if(mode==='3d'){
         try{stage.draw3D(entries);}catch(err){console.warn('Model workspace 3D:',err);setMode('2d',true);return;}
       }else stage.draw2D(entries,$('desk-benz').value);
       lastDraw={mode,entries};
@@ -80,7 +80,7 @@
     row.raw=raw;if(row.field.value!==raw)row.field.value=raw;
     const key=raw.trim();if(key===row.value)return;
     invalidate(row);row.value=key;row.preview=null;
-    if(key){try{row.preview=input.preview(key);}catch{/* Incomplete input is normal while typing. */}}
+    if(key){try{row.preview=root.ModelComparisons.mirrorPreview(key)||input.preview(key);}catch{/* Incomplete input is normal while typing. */}}
     if(cache.has(key))row.result=cache.get(key);
   }
   function edit(row,value,group=false){
@@ -105,14 +105,19 @@
     for(const r of rows)r.duplicate.disabled=full;
   }
   // Store user inputs and row identity, never a pending request or a historical measurement.
-  const snapshot=()=>rows.map(row=>({row,raw:row.raw,visible:row.visible}));
+  const currentView=()=>({mode,benzene:$('desk-benz').value});
+  const snapshot=(withView=false)=>({view:withView?currentView():null,
+    entries:rows.map(row=>({row,raw:row.raw,visible:row.visible,picked:row.pick.checked}))});
+  const captureFile=()=>({view:currentView(),rows:rows.map(row=>({id:row.id,input:row.raw,visible:row.visible,picked:row.pick.checked}))});
   function historyControls(){
     $('desk-undo').disabled=!past.length;$('desk-redo').disabled=!future.length;
   }
-  function checkpoint(){
-    past.push(snapshot());if(past.length>historyLimit)past.shift();
+  function remember(before){
+    deskRevision++;
+    past.push(before);if(past.length>historyLimit)past.shift();
     future.length=0;typing=null;historyControls();
   }
+  function checkpoint(withView=false){remember(snapshot(withView));}
   function detach(row){cancel(row);row.pick.checked=false;row.el.remove();}
   function removeRows(items){
     if(!items.length)return;
@@ -123,52 +128,77 @@
   function travel(redo){
     const from=redo?future:past,to=redo?past:future;
     if(!from.length)return;
-    const target=from.pop(),list=$('desk-rows');to.push(snapshot());typing=null;
-    const keep=new Set(target.map(s=>s.row));
+    deskRevision++;
+    const target=from.pop(),list=$('desk-rows');to.push(snapshot(!!target.view));typing=null;
+    const keep=new Set(target.entries.map(s=>s.row));
     for(const row of rows)if(!keep.has(row))detach(row);
     rows.splice(0,rows.length,...keep);
-    for(const [i,{row,raw,visible}] of target.entries()){
+    for(const [i,{row,raw,visible,picked}] of target.entries.entries()){
       if(list.children[i]!==row.el){list.insertBefore(row.el,list.children[i]||null);I.apply(row.el);}
-      row.visible=visible;if(!visible)cancel(row);
+      row.visible=visible;row.pick.checked=picked;if(!visible)cancel(row);
       if(row.raw!==raw)setValue(row,raw);
-      schedule(row,0);update(row);
     }
-    listControls();draw();
+    if(target.view){$('desk-benz').value=target.view.benzene;lastDraw=null;setMode(target.view.mode);}
+    else {for(const row of rows){schedule(row,0);update(row);}draw();}
+    listControls();
     const repeat=redo?'desk-redo':'desk-undo',opposite=redo?'desk-undo':'desk-redo';
     $(from.length?repeat:opposite).focus();
   }
+  function compareBlock(value){
+    if(value==='')return 'models.compareEmpty';
+    if(value==null)return 'models.compareInvalid';
+    if(value.length>editing.row.field.maxLength)return 'models.compareLong';
+    if(rows.length>=maxRows)return 'models.compareFull';
+    if(value===editing.original)return 'models.compareUnchanged';
+    return null;
+  }
   function updateApply(){
     if(!editing)return;
-    const value=root.MoleculeBuilder.getDeskNotation();
-    text($('desk-apply'),value===''?'models.applyEmpty':'models.applyEdit',{n:editing.id});
-    $('desk-apply').disabled=value==null||value.length>4000;
+    const value=root.MoleculeBuilder.getDeskNotation(), row=editing.row, blocked=compareBlock(value);
+    text($('desk-apply'),value===''?'models.applyEmpty':'models.applyEdit',{n:row.id});
+    $('desk-apply').disabled=value==null||value.length>row.field.maxLength;
+    $('desk-compare').disabled=!!blocked;
+    text($('desk-compare-note'),blocked||'models.compareReady',{n:row.id,max:maxRows});
+  }
+  const pendingEdits=new WeakMap();
+  function closeEditor(keep=false){
+    if(!editing)return;
+    const session=editing;editing=null;$('desk-edit-actions').hidden=true;
+    const state=root.MoleculeBuilder.leaveRow();
+    if(keep)pendingEdits.set(session.row,{state,raw:session.row.raw,original:session.original});
   }
   function openEditor(row){
     const record=row.result?.record||row.preview;if(!record)return;
-    // Load before navigation so a record the sketcher cannot import leaves the desk intact.
-    try{root.MoleculeBuilder.loadStructure(record);}
+    const pending=pendingEdits.get(row),saved=pending?.raw===row.raw?pending:null;
+    // Import before navigation. A suspended edit belongs to this row object and input, never just a reused row number.
+    try{root.MoleculeBuilder.enterRow(record,saved?.state,row.value);}
     catch(e){row.status.textContent=e.message;return;}
-    editing=row;$('desk-edit-actions').hidden=false;
+    pendingEdits.delete(row);
+    editing={row,original:saved?.original||root.MoleculeBuilder.getDeskNotation()||record.sketchNotation||record.notation};$('desk-edit-actions').hidden=false;
     root.MoleculeBuilder.showBuilder();updateApply();$('builder-canvas').focus();
   }
-  function finishEditing(apply){
-    const row=editing;if(!row)return;
-    const value=apply?root.MoleculeBuilder.getDeskNotation():null;
-    if(apply&&(value==null||value.length>4000))return;
-    const original=(row.result?.record||row.preview)?.notation;
-    if(apply&&value&&value!==original){row.field.value=value;edit(row,value);}
-    root.BondAtlas.showView('models');
+  function finishEditing(action){
+    if(!editing)return;
+    const {row,original}=editing, apply=action==='apply', value=action==='discard'?null:root.MoleculeBuilder.getDeskNotation();
+    if(action==='compare'){
+      if(compareBlock(value)){updateApply();return;}
+      // One desk edit: insert the copy, reveal its source, and select only this pair.
+      checkpoint();const added=add(value,row,false);
+      row.visible=true;
+      for(const item of rows)item.pick.checked=item===row||item===added;
+      listControls();closeEditor();root.BondAtlas.showView('models');added.field.focus();added.field.select();return;
+    }
+    if(apply&&(value==null||value.length>row.field.maxLength))return;
+    if(apply&&value&&value!==original)edit(row,value);
+    closeEditor();root.BondAtlas.showView('models');
     if(apply&&value==='')removeRows([row]);else row.editAtoms.disabled?row.field.focus():row.editAtoms.focus();
   }
-  function add(value='',after=null,focus=true){
-    if(rows.length>=maxRows)return;
-    if(focus)checkpoint(); // The initial example is not a user edit.
-    const row={id:nextId++,visible:true,el:element('li','desk-row'),value:'',preview:null,result:null,bondIndex:0};
-    const idx=after?rows.indexOf(after)+1:rows.length;rows.splice(idx,0,row);
+  function createRow(id,value,visible=true,picked=false){
+    const row={id,visible,el:element('li','desk-row'),value:'',preview:null,result:null,bondIndex:0};
     const head=element('div','row-head'),num=element('label','row-number'),field=row.field=element('input'),formula=row.formula=element('bdi','row-formula');
-    num.textContent=String(row.id).padStart(2,'0');field.id='desk-input-'+row.id;num.htmlFor=field.id;field.maxLength=4000;field.autocomplete='off';field.spellcheck=false;field.dir='ltr';field.value=value;
+    num.textContent=String(row.id).padStart(2,'0');field.id='desk-input-'+row.id;num.htmlFor=field.id;field.maxLength=files.maxChars;field.autocomplete='off';field.spellcheck=false;field.dir='ltr';field.value=value;
     I.bindAttr(field,'aria-label','models.row',{n:row.id});I.bindAttr(field,'placeholder','models.placeholder');
-    const pickLabel=element('label','row-pick');row.pick=element('input');row.pick.type='checkbox';I.bindAttr(row.pick,'aria-label','models.selectRow',{n:row.id});row.pick.addEventListener('change',listControls);pickLabel.append(row.pick);
+    const pickLabel=element('label','row-pick');row.pick=element('input');row.pick.type='checkbox';I.bindAttr(row.pick,'aria-label','models.selectRow',{n:row.id});row.pick.addEventListener('change',()=>{listControls();draw();});pickLabel.append(row.pick);
     head.append(num,field,pickLabel);field.addEventListener('input',()=>edit(row,field.value,true));
     field.addEventListener('blur',()=>{if(typing===row)typing=null;});
     field.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing)typing=null;});
@@ -180,12 +210,35 @@
     const remove=button('models.remove',()=>removeRows([row]));
     row.retry=button('models.retry',()=>{invalidate(row);schedule(row,0);update(row);draw();});bar.append(row.toggle,row.duplicate,row.editAtoms,remove,row.retry);
     row.measures=element('details','row-measures');const summary=element('summary');text(summary,'models.measure');row.extent=element('p');row.bondLine=element('label');const bondName=element('span');text(bondName,'models.bond');row.bonds=element('select');row.length=element('output');row.bondLine.append(bondName,row.bonds,row.length);row.bonds.addEventListener('change',()=>{row.bondIndex=Number(row.bonds.value);updateMeasure(row);});row.measures.append(summary,row.extent,row.bondLine);
-    row.el.append(head,meta,bar,row.measures);$('desk-rows').insertBefore(row.el,rows[idx+1]?.el||null);setValue(row,value);schedule(row,350);update(row);draw();listControls();if(focus){field.focus();field.select();}
+    row.el.append(head,meta,bar,row.measures);row.pick.checked=picked;setValue(row,value);update(row);return row;
+  }
+  function add(value='',after=null,focus=true){
+    if(rows.length>=maxRows)return;
+    if(focus)checkpoint(); // The initial example is not a user edit.
+    while(rows.some(row=>row.id===nextId))nextId=nextId%files.maxId+1;
+    const row=createRow(nextId,value);nextId=nextId%files.maxId+1;
+    const idx=after?rows.indexOf(after)+1:rows.length;rows.splice(idx,0,row);
+    $('desk-rows').insertBefore(row.el,rows[idx+1]?.el||null);schedule(row,350);update(row);draw();listControls();if(focus){row.field.focus();row.field.select();}
+    return row;
+  }
+  function installFile(state){
+    if(!active)throw Error('Workspace no longer active');
+    // Stage every row off-DOM before touching history, cancelling work, or rendering.
+    const incoming=state.rows.map(r=>createRow(r.id,r.input,r.visible,r.picked));
+    const before=snapshot(true);
+    function install(next,view){
+      for(const row of rows)cancel(row);
+      rows.splice(0,rows.length,...next);$('desk-rows').replaceChildren(...next.map(r=>r.el));
+      $('desk-benz').value=view.benzene;lastDraw=null;setMode(view.mode);listControls();
+    }
+    try{install(incoming,state.view);}
+    catch(error){install(before.entries.map(entry=>entry.row),before.view);throw error;}
+    remember(before);
   }
   function setActive(on){
-    if(editing&&root.BondAtlas.state.labView!=='builder'){editing=null;$('desk-edit-actions').hidden=true;}
+    if(on&&editing)closeEditor(true);
     if(active===on)return;active=on;
-    if(!on){for(const row of rows)cancel(row);lastDraw=null;return;}
+    if(!on){deskRevision++;for(const row of rows)cancel(row);lastDraw=null;return;}
     if(!stage){stage=root.ModelStage.create($('desk-stage'));add('ethanol',null,false);}
     setMode(mode);
   }
@@ -194,7 +247,7 @@
   $('desk-fit').addEventListener('click',()=>stage.fit());$('desk-in').addEventListener('click',()=>stage.zoom(1.2));$('desk-out').addEventListener('click',()=>stage.zoom(1/1.2));
   document.addEventListener('atlas:localechange',()=>{for(const row of rows)updateMeasure(row);});
   const themeChange=()=>draw(true);new MutationObserver(themeChange).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-contrast']});matchMedia('(prefers-color-scheme: dark)').addEventListener('change',themeChange);
-  $('desk-all').addEventListener('change',e=>{for(const r of rows)r.pick.checked=e.target.checked;listControls();});
+  $('desk-all').addEventListener('change',e=>{for(const r of rows)r.pick.checked=e.target.checked;listControls();draw();});
   $('desk-remove-picked').addEventListener('click',()=>removeRows(rows.filter(r=>r.pick.checked)));
   $('desk-undo').addEventListener('click',()=>travel(false));$('desk-redo').addEventListener('click',()=>travel(true));
   $('model-desk').addEventListener('keydown',e=>{
@@ -202,8 +255,14 @@
     const key=e.key.toLowerCase(),redo=key==='y'||(key==='z'&&e.shiftKey);
     if((key==='z'||key==='y')&&(redo?future:past).length){e.preventDefault();travel(redo);}
   });
-  $('desk-apply').addEventListener('click',()=>finishEditing(true));$('desk-discard').addEventListener('click',()=>finishEditing(false));
+  for(const action of ['apply','compare','discard'])$('desk-'+action).addEventListener('click',()=>finishEditing(action));
   I.bindAttr($('desk-add'),'title','models.limit',{max:maxRows});
+  // A delayed read may replace only the desk it was requested for. Include
+  // selection, grouped typing and view options that aren't history checkpoints.
+  files.attach(captureFile,installFile,()=>JSON.stringify([deskRevision,captureFile()]));
+  const compareSelection=root.ModelComparisons.controls(inputs=>{
+    installFile({view:{...currentView(),mode:'2d'},rows:inputs.map((input,i)=>({id:i+1,input,visible:true,picked:true}))});
+  });
   root.BenzeneView.setup($('desk-benz'),()=>draw(true));
-  root.ModelDesk={setActive,updateApply};setActive(root.BondAtlas.state.labView==='models');
+  root.ModelDesk={setActive,updateApply,suspendEditor:()=>closeEditor(true)};setActive(root.BondAtlas.state.labView==='models');
 })(window);

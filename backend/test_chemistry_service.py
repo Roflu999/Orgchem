@@ -103,6 +103,14 @@ class ParsingTests(unittest.TestCase):
         self.assertNotEqual(parsed("[13CH4]")["id"], parsed("C")["id"])
         self.assertNotEqual(parsed("[NH4+]")["connectivityId"], parsed("N")["connectivityId"])
 
+    def test_school_hydrogen_deficiency_scope(self):
+        for smiles, dbe in [('CCO', 0), ('CC=O', 1), ('C#N', 2), ('Clc1ccccc1', 4),
+                            ('CSC', 0), ('[2H]C([2H])([2H])[2H]', 0), ('C.C', None),
+                            ('C[S+](C)[O-]', None), ('CS(=O)C', None), ('O', None),
+                            ('[CH3]', None), ('[Na+].[OH-]', None)]:
+            with self.subTest(smiles=smiles):
+                self.assertEqual(parsed(smiles)['metadata']['dbe'], dbe)
+
     def test_stable_mapping_and_map_free_identity(self):
         mol = parsed("[CH3:17][C@@H:3]([OH:91])[C:4](=[O:5])[OH:6]")
         other_maps = parsed("[CH3:11][C@@H:21]([OH:31])[C:41](=[O:51])[OH:61]")
@@ -238,6 +246,16 @@ class StructureInsightTests(unittest.TestCase):
 
 
 class DraftTests(unittest.TestCase):
+    def test_sketch_smiles_retains_drawn_h_and_stereo_without_changing_identity(self):
+        for text in ('[H]OC', '[H][C@](F)(Cl)Br', '[2H]OC'):
+            with self.subTest(text=text):
+                original = parsed(text)
+                restored = parsed(original['sketchNotation'])
+                self.assertEqual(restored['atoms'].count('H'), 1)
+                self.assertEqual(restored['stereoisomerId'], original['stereoisomerId'])
+                self.assertEqual(sorted(restored['isotopes']), sorted(original['isotopes']))
+        self.assertEqual(parsed('[H]OC')['stereoisomerId'], parsed('CO')['stereoisomerId'])
+
     @staticmethod
     def draft(record):
         coords = record["layouts"]["skeletal"]["atoms"]

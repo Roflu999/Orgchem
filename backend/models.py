@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class JobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    operation: Literal["parse", "enumerate", "conformers", "projection", "torsion", "export", "relationship", "name"]
+    operation: Literal["plate-carbonyl", "parse", "enumerate", "conformers", "projection", "torsion", "export", "relationship", "name"]
     payload: dict[str, Any]
 
 

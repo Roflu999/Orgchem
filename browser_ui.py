@@ -5,6 +5,7 @@ These automated checks supplement, not certify, manual assistive-technology test
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, expect
@@ -91,6 +92,35 @@ def preferences(page, **values):
     expect(page.locator('#preferences-button')).to_be_focused()
 
 
+def workspace_file_round_trip(page):
+    """Use a browser download as the input file, not a prebuilt fixture."""
+    page.get_by_role('button', name='Move an oxygen', exact=True).click()
+    rows = page.locator('#desk-rows > li')
+    expect(rows).to_have_count(2)
+    rows.nth(1).get_by_role('button', name='Hide', exact=True).click()
+    fields = rows.locator('.row-head > input')
+    values = fields.evaluate_all('(inputs) => inputs.map(i => i.value)')
+    page.locator('#desk-files > summary').click()
+    with page.expect_download() as event:
+        page.locator('#desk-file-download').click()
+    download = event.value
+    assert download.suggested_filename.endswith('.orgchem.json')
+    data = download.path().read_bytes()
+    assert [r['input'] for r in json.loads(data)['rows']] == values
+    page.locator('#desk-add').click()
+    file_input = page.locator('#desk-file-input')
+    file_input.set_input_files({'name': 'workspace.orgchem.json', 'mimeType': 'application/json', 'buffer': data})
+    expect(rows).to_have_count(2)
+    assert fields.evaluate_all('(inputs) => inputs.map(i => i.value)') == values
+    expect(rows.nth(1)).to_have_attribute('data-visible', 'false')
+    expect(rows.nth(0).get_by_role('checkbox')).to_be_checked()
+    page.locator('#desk-undo').click()
+    expect(rows).to_have_count(3)
+    page.locator('#desk-redo').click()
+    expect(rows).to_have_count(2)
+    print('PASS: browser workspace file download, reopen, hidden row, selection and undo/redo', flush=True)
+
+
 def student_walkthrough(page, captures=None):
     """Protect the first phone-sized lesson without depending on a pixel-perfect theme."""
     page.locator('#show-builder').click()
@@ -122,9 +152,35 @@ def student_walkthrough(page, captures=None):
     print('PASS phone canvas, keyboard drawing tools, atom identity and localized sketch guide', flush=True)
 
 
+def reaction_phone(page, captures=None):
+    page.set_viewport_size({'width': 390, 'height': 844})
+    preferences(page, text='large')
+    page.locator('#show-reagents').click()
+    page.locator('#rx-substrate').fill('C' * 70 + 'O')
+    expect(page.locator('#rx-formula-note')).to_contain_text('C70H142O', timeout=30000)
+    page.locator('#rx-inspect-details > summary').click()
+    panel = page.locator('#rx-inspect-view')
+    picker = panel.get_by_role('combobox', name='Focus on')
+    picker.focus()
+    picker.press('End')
+    expect(panel.locator('img')).to_have_attribute('alt', re.compile(r'Connectivity around O71'))
+    fit = panel.get_by_role('button', name='Fit', exact=True)
+    for control in (picker, fit):
+        control.scroll_into_view_if_needed()
+        box = control.bounding_box()
+        assert box and box['x'] >= -1 and box['x'] + box['width'] <= 391, box
+    assert not semantics(page)['overflow'], 'Page overflows the phone viewport'
+    if captures:
+        panel.screenshot(path=str(captures / 'reaction-phone-site.png'))
+    fit.click()
+    expect(picker).to_have_value('')
+    print('PASS phone-width large-text reaction inspector, 71-atom site focus and Fit', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--url', default='http://127.0.0.1:8000')
+    parser.add_argument('--reaction-phone', action='store_true', help='Run only the phone-width large molecule inspector check.')
     parser.add_argument('--browser-library-root')
     parser.add_argument('--disable-browser-sandbox', action='store_true')
     parser.add_argument('--screenshots', default='/tmp/bond-atlas-ui')
@@ -149,6 +205,11 @@ def main():
         page.on('request', lambda request: jobs.append(request.url) if request.method=='POST' and '/api/v1/jobs' in request.url else None)
         try:
             page.goto(args.url,wait_until='domcontentloaded',timeout=30000)
+            if args.reaction_phone:
+                reaction_phone(page, out if args.capture else None)
+                assert not errors, errors
+                return
+            workspace_file_round_trip(page)
             page.locator('#show-stereo').click()
             expect(page.locator('#language-select option')).to_have_count(6)
             expect(page.locator('.stereo-variant')).to_have_count(2,timeout=20000)

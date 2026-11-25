@@ -141,7 +141,7 @@
     parseFormula(formulaOf(g), { enumeration: false });
     return g;
   }
-  function readSmiles(input) {
+  function readSmiles(input, {keepHydrogens = false} = {}) {
     const s = String(input).trim();
     if (!s || s.length > 4000) throw Error('Enter a nonempty SMILES of up to 4,000 characters.');
     const atoms = [], edges = [], stack = [], rings = new Map(), explicit = new Map();
@@ -178,7 +178,8 @@
     if (expectAtom || order !== null || stack.length || rings.size) throw Error('Incomplete SMILES: check branches, ring labels and trailing bonds.');
     const raw = { atoms, m: atoms.map(() => atoms.map(() => 0)) }; edges.forEach(([a, b, o]) => { raw.m[a][b] = raw.m[b][a] = o; });
     explicit.forEach((h, i) => { if (used(raw, i) + h !== VAL[atoms[i]]) throw Error('Bracket atom ' + (i + 1) + ' has an unsupported radical or underfilled valence.'); });
-    return normalizeGraph(raw);
+    const heavy=normalizeGraph(raw); // Validate even when the editor needs the explicit graph.
+    return keepHydrogens ? raw : heavy;
   }
   function tagsFor(g) {
     const tags = new Set(), h = g.atoms.map((e, i) => VAL[e] - used(g, i));

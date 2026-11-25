@@ -39,6 +39,7 @@
       if(app.state.busy)throw Error('Wait for the current search or cancel it before importing.');
       const text=$('import-text').value;let format=$('import-format').value;
       await ChemistryClient.ready;
+      if(!current())return;
       if(ChemistryClient.available&&format!=='formula'){
         let legacy=null;try{legacy=F.parseData(text,format,chosenFilename);}catch(e){
           legacy=await ChemistryClient.parseNameFallback(text,format,e,options);
@@ -54,7 +55,7 @@
           app.loadStructures(records,legacy.source);window.StereoExplorer?.setMolecules(records,{sync:false});
         }else if(legacy?.kind==='formula')await importFormula(legacy.parsed.formula);
         else{
-          if(format==='auto')format=/V(?:2000|3000)/.test(text)?(text.includes('$$$$')?'sdf':'mol'):/^\s*[\[{]/.test(text)&&!/^\s*\[(?:\d+)?(?:Cl|Br|C|N|O|F|I|H)/.test(text)?'json':'smiles';
+          if(format==='auto')format=F.structureFormat(text)||'smiles';
           let result;
           if(format==='json'&&legacy&&!text.includes('bond-atlas/3')){const records=[];for(const g of legacy.isomers)records.push(...(await ChemistryClient.parse(g.notation,'smiles',options)).molecules);result={molecules:records};}
           else result=await ChemistryClient.job('parse',{text,format,allowNames:format==='smiles'},options);

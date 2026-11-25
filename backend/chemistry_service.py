@@ -156,12 +156,13 @@ def _with_hs(mol, add_coords=False):
     return out
 
 
-def _canonical(mol, stereo=True):
+def _canonical(mol, stereo=True, *, keep_hydrogens=False):
     bare = Chem.Mol(mol)
     for atom in bare.GetAtoms():
         atom.SetAtomMapNum(0)
     # Ordinary explicit H and implicit H have the same chemical identity.
-    bare = Chem.RemoveHs(bare)
+    if not keep_hydrogens:
+        bare = Chem.RemoveHs(bare)
     if not stereo:
         Chem.RemoveStereochemistry(bare)
     if stereo and bare.GetStereoGroups():
@@ -642,7 +643,11 @@ def _record(mol, conformers=None, warnings=None):
     insights = _structure_insights(mol, components)
     charge = Chem.GetFormalCharge(mol)
     dbe = None
-    if components == 1 and charge == 0 and not any(a.GetNumRadicalElectrons() for a in mol.GetAtoms()) and set(counts) <= {"C", "H", "N", "O", "S", "F", "Cl", "Br", "I"}:
+    # The school-level formula assumes a single organic molecule with ordinary valences.
+    valences = {"C": 4, "H": 1, "N": 3, "O": 2, "S": 2, "F": 1, "Cl": 1, "Br": 1, "I": 1}
+    if (components == 1 and counts.get("C") and all(
+            not a.GetFormalCharge() and not a.GetNumRadicalElectrons()
+            and valences.get(a.GetSymbol()) == a.GetTotalValence() for a in mol.GetAtoms())):
         dbe = (2 * counts.get("C", 0) + 2 + counts.get("N", 0) - counts.get("H", 0) - sum(counts.get(x, 0) for x in ("F", "Cl", "Br", "I"))) / 2
     known = _NAME_BY_CONNECTIVITY.get(conn_notation)
     skeletal_svg, skeletal = _depiction(mol, False)
@@ -684,6 +689,8 @@ def _record(mol, conformers=None, warnings=None):
         "provenance": {"toolkit": "RDKit", "version": rdBase.rdkitVersion, "identity": "mapped chemical state; canonical identity excludes transport atom maps"},
         "schema": "bond-atlas/3", "id": sid, "connectivityId": _hash("conn-", conn_notation), "stereoisomerId": sid, "mirrorStereoisomerId": _mirror_identity(mol, stereo),
         "name": known or notation, "knownName": known is not None, "notation": notation,
+        # Row edits round-trip drawn hydrogen vertices, not just chemical identity.
+        **({"sketchNotation": _canonical(mol, keep_hydrogens=True)} if any(a.GetAtomicNum() == 1 for a in mol.GetAtoms()) else {}),
         "formula": _display_formula(mol), "charge": charge,
         "atoms": [a.GetSymbol() for a in mol.GetAtoms()], "atomIds": [_aid(a) for a in mol.GetAtoms()],
         "charges": [a.GetFormalCharge() for a in mol.GetAtoms()], "isotopes": [a.GetIsotope() for a in mol.GetAtoms()],
@@ -1466,7 +1473,50 @@ def relationship(payload):
     return {"relationship": result}
 
 
-_OPERATIONS = {"parse": parse, "enumerate": enumerate_stereoisomers, "conformers": conformers,
+def plate_carbonyl(payload):
+    """Reduce one supported ring-containing carbonyl; keep the parent atom order for site labels."""
+    mol, _ = _one(payload)
+    outside = {"ok": False, "detail": "This ring pathway covers neutral carbon/oxygen compounds with isolated aldehyde or ketone groups, not arbitrary functional groups.", "alternatives": []}
+    if (len(Chem.GetMolFrags(mol)) != 1 or not mol.GetRingInfo().NumRings() or mol.GetStereoGroups()
+            or any(a.GetSymbol() not in ('C', 'O') or a.GetFormalCharge() or a.GetIsotope() or a.GetNumRadicalElectrons()
+                   or (a.GetSymbol() == 'O' and a.IsInRing()) for a in mol.GetAtoms())):
+        return outside
+    centers = []
+    for b in mol.GetBonds():
+        a, z = b.GetBeginAtom(), b.GetEndAtom()
+        if b.GetIsAromatic():
+            continue
+        if a.GetSymbol() == z.GetSymbol() == 'O':
+            return outside
+        if b.GetBondType() == Chem.BondType.SINGLE:
+            continue
+        if a.GetSymbol() == 'O':
+            a, z = z, a
+        if (b.GetBondType() != Chem.BondType.DOUBLE or a.GetSymbol() != 'C' or z.GetSymbol() != 'O'
+                or any(n.GetSymbol() != 'C' for n in a.GetNeighbors() if n.GetIdx() != z.GetIdx())):
+            return outside
+        centers.append((a.GetIdx(), z.GetIdx()))
+    indices = {c for c, _ in centers}
+    if not centers or any(n.GetIdx() in indices for c in indices for n in mol.GetAtomWithIdx(c).GetNeighbors()):
+        return outside
+    products = {}
+    for c, o in centers:
+        child = Chem.RWMol(mol)
+        child.GetBondBetweenAtoms(c, o).SetBondType(Chem.BondType.SINGLE)
+        for idx in [c, o]:
+            atom = child.GetAtomWithIdx(idx)
+            atom.SetNumExplicitHs(mol.GetAtomWithIdx(idx).GetTotalNumHs() + 1)
+            atom.SetNoImplicit(True)
+        Chem.SanitizeMol(child)
+        products.setdefault(_canonical(child), []).append(f'C{c+1}=O{o+1}')
+    detail = ('Hydride adds at the chosen carbonyl carbon; protonation gives an alcohol. The ring skeleton is retained. '
+              'No face of attack, newly formed stereochemistry or product ratio is assigned.')
+    return {'ok': True, 'ruleId': 'carbonyl-hydride', 'label': 'Borohydride reduction', 'detail': detail,
+            'alternatives': [{'label': 'Alcohol at ' + ' or '.join(sites), 'sites': ' or '.join(sites),
+                              'productSmiles': smiles, 'detail': detail} for smiles, sites in products.items()]}
+
+
+_OPERATIONS = {"plate-carbonyl": plate_carbonyl, "parse": parse, "enumerate": enumerate_stereoisomers, "conformers": conformers,
                "projection": projection, "torsion": torsion, "export": export, "relationship": relationship}
 
 

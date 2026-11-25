@@ -270,9 +270,13 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 </style>
 <link rel="stylesheet" href="stereo.css">
 <link rel="stylesheet" href="workbench.css">
+<link rel="stylesheet" href="reaction-plates.css">
+<link rel="stylesheet" href="plate-viewer.css">
 <link rel="stylesheet" href="atlas-fonts.css">
 <script src="atlas-locales.js"></script>
+<link rel="stylesheet" href="comparison.css">
 <script src="atlas-shell-locales.js"></script>
+<script src="comparison-locales.js"></script>
 <script src="atlas-i18n.js"></script>
 <script src="atlas-preferences.js"></script>
 <script src="viewer-lifecycle.js"></script>
@@ -290,33 +294,73 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
       <div class="desk-tools"><label id="desk-benz-wrap" hidden><span data-i18n="benz.label">Benzene view</span> <select class="compact-select" id="desk-benz" aria-describedby="desk-benz-note"></select></label><button type="button" id="desk-2d" aria-pressed="true">2D</button><button type="button" id="desk-3d" aria-pressed="false">3D</button>
       <button type="button" id="desk-out" aria-label="Zoom out" data-i18n-aria-label="models.out">−</button><button type="button" id="desk-in" aria-label="Zoom in" data-i18n-aria-label="models.in">+</button><button type="button" id="desk-fit" data-i18n="shell.fit">Fit drawing</button></div>
     </header>
+    <section class="desk-starters" aria-labelledby="desk-starters-title" aria-describedby="desk-starters-hint">
+      <h2 id="desk-starters-title" data-i18n="compare.title">Try a comparison</h2>
+      <div class="starter-actions"><button type="button" id="desk-starter-oxygen" class="plain-button" data-i18n="compare.oxygen">Move an oxygen</button><button type="button" id="desk-starter-chain" class="plain-button" data-i18n="compare.chain">Branch a chain</button><button type="button" id="desk-starter-mirror" class="plain-button" data-i18n="compare.mirror">Look in a mirror</button></div>
+      <p id="desk-starters-hint" data-i18n="compare.hint">Open an editable pair in place of this list. Undo brings your list back.</p>
+    </section>
     <div class="desk-body"><aside class="desk-list" aria-labelledby="desk-list-title"><div class="desk-list-heading"><h2 id="desk-list-title" data-i18n="models.list">Molecules</h2><div class="desk-tools"><button type="button" id="desk-undo" data-i18n="shell.undo" disabled>Undo</button><button type="button" id="desk-redo" data-i18n="shell.redo" disabled>Redo</button></div></div>
       <p data-i18n="models.intro">Enter a name or SMILES. Each visible row adds a model to the canvas.</p>
       <div class="desk-bulk"><label><input type="checkbox" id="desk-all"><span data-i18n="models.selectAll">Select all</span></label><button type="button" class="plain-button" id="desk-remove-picked" disabled></button></div>
       <ol id="desk-rows"></ol><button type="button" class="plain-button" id="desk-add" data-i18n="models.add">+ Add molecule</button>
-    </aside><div id="desk-stage" role="img" aria-label="Molecule comparison canvas" data-i18n-aria-label="models.canvas"></div></div>
+      <details id="desk-files"><summary data-i18n="workspaceFile.title">Workspace files</summary>
+        <p class="input-note" id="desk-file-help" data-i18n="workspaceFile.help">Opening a file replaces these rows. You can undo it. Visible molecules may be processed by this site's chemistry service.</p>
+        <div class="desk-tools"><button type="button" id="desk-file-download" data-i18n="workspaceFile.download">Download workspace</button><button type="button" id="desk-file-save" data-i18n="workspaceFile.save" hidden>Save as…</button><button type="button" id="desk-file-open" aria-describedby="desk-file-help" data-i18n="workspaceFile.open">Open workspace…</button></div>
+        <input type="file" id="desk-file-input" accept=".json,application/json" aria-labelledby="desk-file-open" hidden><p class="input-note" role="status" id="desk-file-status"></p>
+      </details>
+    </aside><div id="desk-stage" role="img" aria-describedby="desk-comparison-status desk-comparison-labels" aria-label="Molecule comparison canvas" data-i18n-aria-label="models.canvas"></div></div>
+    <div class="desk-comparison"><p id="desk-comparison-status" role="status"></p><ul id="desk-comparison-labels" aria-live="polite" aria-atomic="true" hidden></ul>
+      <details id="desk-comparison-note" hidden><summary data-i18n="compare.note">What changed?</summary><p id="desk-comparison-why"></p></details>
+    </div>
     <footer class="desk-footer"><span id="desk-caption"></span><span hidden id="desk-benz-note"></span><span id="desk-status" role="status"></span></footer>
   </section>
   <section id="reaction-panel" aria-labelledby="rx-title" hidden>
-    <header class="desk-bar"><h1 id="rx-title" data-i18n="rx.tab">Reagents</h1><span class="rx-kicker" lang="en">AQA 7405 · Organic mechanisms</span></header>
-    <div class="rx-layout"><aside class="rx-inputs"><label for="rx-substrate" data-i18n="rx.substrate">Starting molecule</label><input id="rx-substrate" value="CCBr" maxlength="160" spellcheck="false" autocomplete="off" dir="ltr" aria-describedby="rx-help">
-      <p id="rx-help" lang="en">Enter an English name or a simple neutral SMILES. Suggested reagents match the bonds in this molecule.</p>
+    <header class="desk-bar"><h1 id="rx-title" data-i18n="rx.guide">Reaction &amp; mechanism guide</h1><span class="rx-kicker" lang="en">Organic chemistry</span></header>
+    <section class="rx-guide-band" aria-labelledby="rx-course-label"><div><label id="rx-course-label" for="rx-course" data-i18n="rx.course">Reading list</label><select id="rx-course" lang="en"></select></div><div lang="en"><p id="rx-course-note"></p><a id="rx-reference" hidden target="_blank" rel="noopener noreferrer"></a></div></section>
+    <details id="plate-lab" lang="en"><summary><span class="rx-kicker">Cambridge International · 9701</span><strong>Reaction plates</strong><span>Prepare two plates, compare pathways and keep a product.</span></summary>
+      <div class="plate-bench">
+        <div class="plate-starters"><label for="plate-starter">Start with a worked pair</label><select id="plate-starter"></select><button type="button" class="plain-button" id="plate-load">Add example plates</button></div>
+        <div class="plate-grid"><section aria-labelledby="plate-prep-title"><h2 id="plate-prep-title">1. Prepare a plate</h2>
+          <form id="plate-form"><label>Substance<select id="plate-stock"></select></label><label id="plate-input-wrap">Name or SMILES<input id="plate-input" maxlength="4000" spellcheck="false" dir="ltr" value="CC(=O)C" placeholder="e.g. propanone or CC(=O)C"></label>
+          <label>Role<select id="plate-role"></select></label><label>Medium<select id="plate-medium"><option value="">No added solvent</option><option value="water">Aqueous · water</option><option value="ethanol">Ethanolic · ethanol</option></select></label><label id="plate-cat-wrap">Catalyst on this plate<select id="plate-catalyst"><option value="">None</option></select></label><button type="submit" class="action-button" id="plate-create">Create plate</button></form>
+        </section><section aria-labelledby="plate-mix-title"><h2 id="plate-mix-title">2. Combine two plates</h2><div class="plate-fields"><label>First plate<select id="plate-left"></select></label><label>Second plate<select id="plate-right"></select></label><label>Conditions<select id="plate-condition"></select></label><button type="button" class="plain-button" id="plate-preview">Check pathways</button></div>
+        <div id="plate-outcomes" hidden><label>Product pathway<select id="plate-branch"></select></label><p id="plate-explanation"></p><button type="button" class="action-button" id="plate-collect">Create product plate</button></div></section></div>
+        <p id="plate-status" role="status">Add a worked pair, or prepare your own plates.</p>
+        <section aria-labelledby="plate-rack-title"><h2 id="plate-rack-title">Your plates <small id="plate-count"></small></h2><p>Inspect a plate to see its structure. Product plates contain the selected isolated product, not the entire mixture. Parent plates stay available for comparison.</p><ol id="plate-rack"></ol></section><div id="plate-inspector" hidden><h3 id="plate-inspector-title" tabindex="-1"></h3><label>Component to inspect<select id="plate-component"></select></label><p id="plate-view-note"></p><div id="plate-view"></div><button type="button" class="plain-button" id="plate-close-view">Close inspection</button></div>
+        <p class="plate-note">These session-only plates model selected Cambridge AS &amp; A Level pathways. An unmatched pair means no rule is available, not necessarily no reaction. No quantities, rates or yields are predicted.</p>
+      </div></details>
+    <details id="rx-challenges" class="rx-challenges" hidden lang="en"><summary>Olympiad problems · hints and worked solutions</summary><div id="rx-problems"></div></details>
+    <div class="rx-layout"><aside class="rx-inputs"><label for="rx-substrate" data-i18n="rx.substrate">Starting molecule</label><input id="rx-substrate" value="CCBr" maxlength="1024" spellcheck="false" autocomplete="off" dir="ltr" aria-describedby="rx-help">
+      <p id="rx-help" lang="en">Enter a name or SMILES. With the chemistry service, larger structures can be inspected up to 256 base atoms. Site rules recognise selected functional groups; parsing a molecule does not mean a pathway is known.</p>
+      <p id="rx-formula-note" lang="en"></p>
       <label for="rx-reagent" data-i18n="rx.reagent">Reagent</label><select id="rx-reagent" lang="en"></select>
+      <label for="rx-setup" data-i18n="rx.conditions">Conditions</label><select id="rx-setup" lang="en" aria-describedby="rx-help"></select>
+      <button id="rx-run" type="button" class="action-button" data-i18n="rx.run">Run reaction</button>
       <label for="rx-path" data-i18n="rx.path">Pathway</label><select id="rx-path" lang="en"></select><p id="rx-match" role="status" lang="en"></p>
       <details id="rx-catalog"><summary data-i18n="rx.examples">Browse worked examples</summary><div id="rx-catalog-list" lang="en"></div></details>
-    </aside><article class="rx-work"><div id="rx-empty" role="status" lang="en" hidden></div>
-      <div id="rx-result" lang="en"><p class="rx-kicker" id="rx-family"></p><h2 id="rx-heading"></h2>
+      <div class="rx-try" lang="en"><strong>Try a site comparison</strong><button type="button" class="plain-button" id="rx-try-elimination">Eliminate from 2-bromobutane</button><button type="button" class="plain-button" id="rx-try-oxidation">Oxidise one end of an asymmetric diol</button></div>
+    </aside><article class="rx-work"><details id="rx-inspect-details" lang="en"><summary>Inspect starting structure · 2D / 3D</summary><div id="rx-inspect-view"></div></details><div id="rx-empty" role="status" lang="en" hidden></div>
+      <div id="rx-result" lang="en"><p class="rx-kicker" id="rx-family"></p><h2 id="rx-heading" tabindex="-1"></h2>
+        <p id="rx-track-tag" class="rx-kicker"></p>
+        <details id="rx-lesson" class="rx-lesson"><summary>Learn this reaction</summary><dl><dt>What to recognise</dt><dd id="rx-cue"></dd><dt>How to reason it out</dt><dd id="rx-reasoning"></dd><dt>Common mistake</dt><dd id="rx-mistake"></dd></dl></details>
+        <section id="rx-branches" class="rx-branches" aria-labelledby="rx-outcome-label" hidden><label id="rx-outcome-label" for="rx-outcome">Product or site pathway</label><p id="rx-outcome-count" role="status"></p><select id="rx-outcome"></select><p id="rx-sites"></p><details id="rx-map-details"><summary>Locate the atoms on the starting molecule</summary><p>Numbers are diagram IDs, not IUPAC locants. Outlined atoms take part in this route.</p><label for="rx-equivalent">Site on the parent</label><select id="rx-equivalent"></select><div id="rx-map-tools" hidden><button type="button" class="plain-button" id="rx-map-toggle">Show whole molecule</button><p id="rx-map-caption"></p></div><div class="rx-map-scroll" tabindex="0" aria-label="Numbered parent structure"><svg id="rx-site-map" role="img" aria-labelledby="rx-map-title" dir="ltr"><title id="rx-map-title">Reaction site on the starting molecule</title></svg></div></details></section>
+        <div id="rx-other-setups" class="rx-other-setups" hidden></div>
         <label id="rx-benz-wrap" hidden><span data-i18n="benz.label">Benzene view</span> <select class="compact-select" id="rx-benz" aria-describedby="rx-benz-note"></select></label><p id="rx-benz-note" hidden></p>
         <div class="rx-display"><svg id="rx-svg" role="img" aria-labelledby="rx-step-title rx-detail" dir="ltr"></svg><div id="rx-structure" hidden></div><small id="rx-legend"></small></div>
         <div id="rx-progress" class="rx-kicker"></div><div id="rx-text" aria-live="polite" aria-atomic="true"><h3 id="rx-step-title"></h3><p id="rx-equation" dir="ltr"></p><p id="rx-detail"></p></div>
         <div class="rx-controls"><button type="button" id="rx-prev" class="plain-button" data-i18n="rx.prev">Previous step</button><button type="button" id="rx-play" class="plain-button"></button><button type="button" id="rx-next" class="action-button" data-i18n="rx.next">Next step</button></div>
-        <div class="rx-products"><b data-i18n="rx.products">Products</b><span id="rx-products" dir="auto"></span></div></div>
-    </article></div><footer class="desk-footer" lang="en">Mechanism schematics, not molecular dynamics or yield predictions. A match is one possible pathway. Explanations are in English. <a href="https://filestore.aqa.org.uk/resources/chemistry/specifications/AQA-7404-7405-SP-2015.PDF" target="_blank" rel="noopener noreferrer">AQA specification · §§3.3.1–3.3.11</a></footer>
+        <div class="rx-products"><b data-i18n="rx.products">Products</b><span id="rx-products" dir="auto"></span><button id="rx-use-product" type="button" class="plain-button" data-i18n="rx.useProduct">Use organic product as starting molecule</button></div></div>
+    </article></div><footer class="desk-footer" lang="en">One transformation at a time. Site and product choices are modelled possibilities, not predictions of selectivity or yield. Course lists are selected topics, not complete specifications or board-endorsed materials. Explanations are in English.</footer>
   </section>
   <div id="form-error" role="alert" hidden></div>
   <section id="builder-panel" class="builder-panel" aria-labelledby="builder-title" hidden>
     <div class="builder-heading"><div><h2 id="builder-title">2D molecule simulator</h2><p>Sketch a molecule, move its atoms, then explore the same structure in 3D.</p></div><div class="builder-heading-actions"><button class="plain-button" id="builder-load-selected" type="button">Edit viewer structure</button><label class="builder-example-label" for="builder-example">Example<select class="compact-select" id="builder-example"><option value="">Load an example…</option><option value="ethanol">Ethanol</option><option value="acetone">Acetone</option><option value="but-1-yne">But-1-yne</option><option value="benzene">Benzene</option></select></label><button class="plain-button" id="builder-split" type="button" aria-controls="builder-split-pane" aria-pressed="false" data-i18n="split.action">Side by side</button><button class="action-button" id="builder-open-viewer" data-i18n="sim.preview" type="button" disabled>View in 3D</button></div></div>
-    <div id="desk-edit-actions" class="desk-bulk" hidden><button type="button" class="action-button" id="desk-apply"></button><button type="button" class="plain-button" id="desk-discard" data-i18n="models.cancelEdit">Back without applying</button></div>
+    <div id="desk-edit-actions" class="desk-bulk" hidden>
+      <button type="button" class="action-button" id="desk-apply"></button>
+      <button type="button" class="plain-button" id="desk-compare" aria-describedby="desk-compare-note" data-i18n="models.keepCompare">Keep original and compare</button>
+      <button type="button" class="plain-button" id="desk-discard" data-i18n="models.cancelEdit">Back without applying</button>
+      <small id="desk-compare-note" role="status"></small>
+    </div>
     <a class="recovery-reminder" href="#draft-recovery-restore" data-i18n="learn.saved">A saved sketch is available</a>
     <p class="builder-message" id="builder-message" role="status" hidden></p>
     <details id="drawing-tools" open><summary data-i18n="learn.tools">Drawing tools · atoms and bonds</summary><div class="builder-palette" aria-label="Drawing tools"><div class="builder-tool-group" id="builder-elements" role="group" aria-label="Elements"></div><div class="builder-tool-group" id="builder-bonds" role="group" aria-label="Bonds"></div><div class="builder-tool-group" role="group" aria-label="Ring templates"><button class="builder-tool" id="builder-ring" type="button" aria-pressed="false" title="Click and place, or drag a regular benzene ring onto the canvas">⌬ <small>Benzene</small></button></div><div class="builder-tool-group" role="group" aria-label="Edit tools"><button class="builder-tool" id="builder-move" type="button" aria-pressed="true" title="Select and drag atoms or bonds to move them">Move</button><button class="builder-tool" id="builder-elastic" type="button" aria-pressed="false" data-i18n="sim.drag">Elastic drag</button><button class="builder-tool" id="builder-select-atoms" type="button" aria-pressed="false" data-i18n="builder.selectAtoms">Select atoms</button><button class="builder-tool" id="builder-erase" type="button" aria-pressed="false" title="Tap an atom or bond to delete it">Erase</button></div></div>
@@ -518,6 +562,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     if(missing)ui('geometry-status','viewer.geometryMissing');else $('geometry-status').textContent='';
   }
   function showView(view){
+    if(state.labView==='builder'&&view!=='builder')window.MoleculeBuilder?.leaveSimulator();
     const standalone=view==='models'||view==='reagents';
     if(view==='builder'||standalone)cancelPendingScene();
     if(view!=='builder')state.split=false;
@@ -688,8 +733,14 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
   }
   function applyFilter(preferredName) {
     if(!state.result) return;
-    const group=$('group-filter').value,all=state.result.isomers;
+    const group=$('group-filter').value,all=state.result.isomers,previous=state.filtered;
     state.filtered=group==='all'?all:all.filter(g=>g.tags.includes(group));
+    if(state.pendingScene||state.together){
+      const oldIds=new Set(previous.map(g=>g.id));
+      if(oldIds.size!==state.filtered.length||state.filtered.some(g=>!oldIds.has(g.id))){
+        cancelPendingScene();state.together=false;$('together-button').setAttribute('aria-pressed','false');
+      }
+    }
     const sort=$('structure-sort').value,direction=$('sort-direction').value==='desc'?-1:1;
     $('sort-reference-controls').hidden=sort!=='relationship';ui('sort-reference-label','explorer.reference',()=>({name:state.sortReference?.name||'—'}));
     const relation=new Map();if(sort==='relationship')state.filtered.forEach(g=>relation.set(g.id,IsomerTypes.relationship(g,state.sortReference)));
@@ -703,7 +754,12 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
     ui('load-more','explorer.more',()=>({count:Math.min(40,Math.max(0,state.filtered.length-state.visibleLimit)),shown:Math.min(state.visibleLimit,state.filtered.length)}));
     $('stage-formula').innerHTML=formulaHTML(state.result.formula);
     const list=$('isomer-list');list.replaceChildren();
-    if(!state.filtered.length){const p=document.createElement('p');p.className='empty-list';ui(p,'explorer.emptyGroup',()=>({group:T('explorer.tag.'+group,{},tagNames[group]||'—')}));list.append(p);state.selected=null;inspection.reset(null);stopRotation();$('stage-empty').hidden=false;$('model-info').hidden=true;return;}
+    if(!state.filtered.length){const p=document.createElement('p');p.className='empty-list';ui(p,'explorer.emptyGroup',()=>({group:T('explorer.tag.'+group,{},tagNames[group]||'—')}));list.append(p);
+      cancelPendingScene();state.selected=null;state.together=false;inspection.reset(null);stopRotation();
+      $('together-button').hidden=true;$('together-button').setAttribute('aria-pressed','false');$('geometry-status').hidden=true;
+      $('stage-empty').hidden=false;$('model-info').hidden=true;$('element-legend').replaceChildren();
+      for(const id of ['model2d','model3d'])uiAttr(id,'aria-label','viewer.empty');
+      document.dispatchEvent(new CustomEvent('bondatlas:selection',{detail:{molecule:null}}));return;}
     $('stage-empty').hidden=true;$('model-info').hidden=false;
     for(const iso of state.filtered.slice(0,state.visibleLimit)){
       const button=document.createElement('button');button.type='button';button.className='isomer-card';button.setAttribute('aria-pressed','false');uiAttr(button,'aria-label','viewer.cardLabel',()=>({name:iso.name,description:allDescriptions(iso)}));button.dataset.id=iso.id;
@@ -809,13 +865,19 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
             const result=await ChemistryClient.job('conformers',{molecule:g,numConfs:1,seed:42},{signal:controller.signal});
             // Duplicate imported source records intentionally have distinct UI
             // identities, even when the service returns the same chemical ID.
+            if(controller.signal.aborted)return;
+            if(!R.geometry(result.molecule))throw Error('No 3D conformer is available for this comparison.');
             prepared.push({...result.molecule,id:g.id});
           }else prepared.push(g);
         }
         if(controller.signal.aborted||snapshot!==state.result)return;
-        window.BondAtlas.loadStructures(prepared,'3D stereoisomer comparison');await setTogether(true);
+        // Preparing a view enriches the matching rows, not the identity or scope of the result set.
+        const updates=new Map(prepared.map(g=>[g.id,g]));
+        snapshot.isomers=snapshot.isomers.map(g=>updates.get(g.id)||g);
+        state.sortReference=updates.get(state.sortReference?.id)||state.sortReference;
+        applyFilter(state.selected?.id);await setTogether(true);
       }
-      catch(e){if(e.name!=='AbortError')showError(e.message);}
+      catch(e){if(!controller.signal.aborted&&e.name!=='AbortError')showError(e.message);}
       finally{if(state.pendingScene===controller)cancelPendingScene();}return;
     }
     if(!on)cancelPendingScene();state.together=!!on&&state.filtered.length>1;document.dispatchEvent(new CustomEvent('bondatlas:scene'));$('together-button').setAttribute('aria-pressed',String(state.together));
@@ -973,7 +1035,10 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 <script src="quantum-grid.js"></script>
 <script src="model-input.js"></script>
 <script src="benzene-view.js"></script>
+<script src="comparison-mirrors.js"></script>
+<script src="model-comparisons.js"></script>
 <script src="model-stage.js"></script>
+<script src="workspace-file.js"></script>
 <script src="model-desk.js"></script>
 <script src="reaction-rules.js"></script>
 <script src="reaction-diagram.js"></script>
@@ -981,5 +1046,14 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 <script src="reaction-aromatic.js"></script>
 <script src="reaction-substitution.js"></script>
 <script src="reaction-motifs.js"></script>
+<script src="reaction-oxidation.js"></script>
+<script src="reaction-extension.js"></script>
+<script src="reaction-sites.js"></script>
+<script src="reaction-guide.js"></script>
+<script src="reaction-learning-ui.js"></script>
 <script src="reaction-library.js"></script>
+<script src="reaction-input.js"></script>
+<script src="plate-chemistry.js"></script>
+<script src="plate-viewer.js"></script>
+<script src="reaction-plates.js"></script>
 <script src="reaction-ui.js"></script>

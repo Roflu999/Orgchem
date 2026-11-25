@@ -1,4 +1,16 @@
-# v3.3.0: Molecule workspace and reaction mechanisms
+# v3.4.0: Reaction plates and molecular comparisons
+
+- Combine two Cambridge International 9701 teaching plates and keep a selected product on a third. Ten worked pairs cover reductions, substitution, elimination and oxidation under distillation versus reflux. Parent plates remain available for a different pathway.
+- Explore 32 reaction lessons across AQA, Cambridge, Edexcel, IB and Olympiad reading lists, with five original Olympiad problems. Supported multisite substrates expose equivalent sites, distinct products and E/Z alternatives rather than predicting yields.
+- Inspect larger molecules with the local chemistry service (up to 256 base atoms). Focus on one atom in 2D or a verified 3D conformer, fit the whole molecule and see hydrogen deficiency where applicable.
+- The README now walks a first-time Windows user from installing Python to opening the app. The sandboxed CI job includes the phone-width inspector check; see `UI_CHECK.md` for verification scope.
+
+- **What changed?** highlights a structural difference for three curated pairs. Check two visible models to compare them, and open the explanation when you want it. Other pairs can still be explored side by side.
+- **Move an oxygen**, **Branch a chain**, and **Look in a mirror** open editable pairs: ethanol/dimethyl ether, pentane/2-methylbutane, and the mirror forms of lactic acid. Undo returns to your previous list.
+- **Keep original and compare** puts a changed sketch next to its source instead of replacing it. The new row is one undoable change.
+- Save the workspace to a local `.orgchem.json` file and reopen it later. Files keep row order, input, visibility, selection and display mode. Use the download option in any supported browser or the native Save As picker where available. Opening a workspace is undoable; sketches are not automatically saved.
+
+## v3.3.0: Molecule workspace and reaction mechanisms
 
 - Compare up to eight molecules in a model-only canvas. In 3D, all molecules share one scale; bond lengths and molecular spans come from calculated conformer coordinates.
 - Add, duplicate, hide or remove molecules individually or in batches. Edit atoms in the 2D sketcher and apply changes to the originating row. Undo and redo list changes or sketch edits.

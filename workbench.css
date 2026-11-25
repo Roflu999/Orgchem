@@ -242,6 +242,16 @@ body[data-workspace="models"] .lab-navigation { padding-block:1rem; }
 /* Reagent selection stays beside, rather than on top of, the electron-flow diagram. */
 body[data-workspace="reagents"] :is(.intro,#workspace-context,#form-error) { display:none; }
 #reaction-panel { border:1px solid var(--line); border-radius:.75rem; background:var(--surface); overflow:hidden; }
+.rx-guide-band { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem 1.5rem; padding:1rem clamp(.8rem,2vw,1.6rem); background:var(--surface); border-block:1px solid var(--line); }
+.rx-guide-band label,.rx-branches>label { display:block; margin-bottom:.35rem; font-weight:650; }
+.rx-guide-band>div:last-child { flex:1 1 20rem; } .rx-guide-band p { margin:0; }
+.rx-guide-band select,.rx-branches select { max-width:100%; min-height:2.6rem; padding:.4rem; color:var(--ink); background:var(--surface); border:1px solid var(--control-line); border-radius:.4rem; }
+.rx-branches,.rx-lesson,.rx-other-setups,.rx-challenges { padding:.85rem 1rem; margin:.65rem 0; border-inline-start:3px solid var(--accent-ink); background:var(--surface); }
+.rx-lesson dt,.rx-try strong { font-weight:650; } .rx-lesson dd { margin:0 0 .65rem; }
+.rx-try { margin-top:1rem; } .rx-try button { display:block; text-align:start; margin-top:.3rem; }
+.rx-other-setups button { margin:.25rem; } .rx-challenges article+article { border-block-start:1px solid var(--line); }
+.rx-challenges details { margin:.5rem 0; } .rx-map-scroll { max-width:100%; overflow:auto; padding:.4rem; direction:ltr; }
+#rx-site-map { display:block; color:var(--ink); } #rx-site-map circle { fill:var(--surface); } #rx-site-map .rx-mark { stroke:var(--accent-ink); stroke-width:3; }
 .rx-layout { display:grid; grid-template-columns:minmax(15rem,21rem) minmax(0,1fr); }
 .rx-inputs,.rx-work { min-width:0; padding:clamp(.8rem,2vw,1.6rem); }
 .rx-inputs { border-inline-end:1px solid var(--line); }

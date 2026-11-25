@@ -111,4 +111,46 @@ for (const patch of [{atoms:['C',null]}, {charge:1}, {charges:[0,1]}, {isotopes:
   {bonds:[],hydrogens:[4,4]}]) assert.deepEqual(run('alkene-hbr',{...g,...patch}),{reason:'unsupported'});
 assert.deepEqual(run('alkene-hbr',{...g,schema:'bond-atlas/3',charges:[0,0],radicals:[0,0],isotopes:[0,0],
   stereo:{centers:[],bonds:[],unsupported:[]}}),run('alkene-hbr',g));
-console.log('Reaction addition: 9 catalogue entries, mechanism stages, product connectivity and refusals passed.');
+const {directions,independentSites}=require('./reaction-addition.js');
+const products=routes=>routes.map(r=>record(r.productSmiles).id).sort();
+assert.deepEqual(products(directions('alkene-hbr',record('CC=CCC'))),['CC(Br)CCC','CCC(Br)CC'].map(s=>record(s).id).sort());
+for(const s of ['CC=CC','C=C','C=CC=C'])assert.equal(directions('alkene-hbr',record(s)).length,0);
+const reductions=independentSites('carbonyl-hydride',record('CC(=O)CCC(=O)CC'));
+assert.deepEqual(products(reductions),['CC(=O)CCC(O)CC','CC(O)CCC(=O)CC'].map(s=>record(s).id).sort());
+for(const r of reductions)assert.deepEqual(products(independentSites('carbonyl-hydride',record(r.productSmiles))),[record('CC(O)CCC(O)CC').id]);
+const equiv=independentSites('carbonyl-hydride',record('O=CCCC=O'));assert.equal(equiv.length,1);assert.equal(equiv[0].siteChoices.length,2);
+assert.deepEqual(products(independentSites('alkene-br2',record('C=CCC=CC'))),['C=CCC(Br)C(Br)C','CC=CCC(Br)CBr'].map(s=>record(s).id).sort());
+for(const s of ['C=CC=C','C=C=C','C1=CCCCC1'])assert.equal(independentSites('alkene-br2',record(s)).length,0);
+assert.equal(independentSites('carbonyl-hydride',record('CC(=O)CC(=O)OC')).length,0);
+for(const s of ['O=CCOO','O=CCC(O)O','O=CCC(=O)O'])assert.deepEqual(independentSites('carbonyl-hydride',record(s)),[]);
+assert.deepEqual(products(independentSites('carbonyl-hydride',record('O=CCOC'))),[record('OCCOC').id]);
+assert.ok(reductions.every(r=>r.stereo==='connectivity only'));
+
+// Imported parent atom order, without asking the 64-heavy-atom offline parser
+// to manufacture records. Test actual product growth, not just parent length.
+function chain(n,doubles,last='C') {
+  const atoms=Array(n).fill('C');atoms[n-1]=last;
+  const hydrogens=atoms.map(el=>Chem.VAL[el]),bonds=[];
+  for(let a=0;a<n-1;a++) {
+    const b=a+1,order=doubles.includes(a)?2:1;
+    bonds.push({a,b,order}); hydrogens[a]-=order;hydrogens[b]-=order;
+  }
+  return {atoms,bonds,hydrogens};
+}
+for(const [id,grows] of [['alkene-hbr',1],['alkene-h2so4',5],['alkene-br2',2],['alkene-h2so4-hydrolysis',1],['carbonyl-hydride',0],['carbonyl-cyanide',2]]) {
+  const n=256-grows, carbonyl=id.startsWith('carbonyl'), input=n=>chain(n,[carbonyl?n-2:0],carbonyl?'O':'C');
+  const r=run(id,input(n));assert.ok(!r.reason,id);
+  assert.equal(r.productSmiles.match(/Cl|Br|[CNOS]/g).length,256,id);
+  assert.deepEqual(run(id,input(n+1)),{reason:'unsupported'},id);
+}
+assert.deepEqual(directions('alkene-hbr',chain(256,[5])),[]);
+assert.deepEqual(independentSites('alkene-br2',chain(255,[0,59])),[]);
+const diene=chain(254,[0,59]), distinct=independentSites('alkene-br2',diene);
+assert.equal(distinct.length,2);assert.ok(distinct.every(r=>r.productSmiles.match(/Br/g).length===2));
+const rev=i=>diene.atoms.length-i-1, backwards={atoms:diene.atoms.slice().reverse(),hydrogens:diene.hydrogens.slice().reverse(),
+  bonds:diene.bonds.map(({a,b,order})=>({a:rev(b),b:rev(a),order})).reverse()};
+assert.deepEqual(independentSites('alkene-br2',backwards).map(r=>r.productSmiles).sort(),distinct.map(r=>r.productSmiles).sort());
+for(const patch of [{formalCharge:1},{formalCharges:[0,1]}, {stereo:{centers:[{atom:0,specified:false,cip:'R'}],bonds:[]}},
+  {stereo:{centers:[],bonds:[{a:0,b:1,specified:false,descriptor:'E'}]}}, {notation:'c'.repeat(1025)}])
+  assert.deepEqual(run('alkene-hbr',{...g,...patch}),{reason:'unsupported'});
+console.log('Reaction addition: mechanisms, distinct orientations, independent sites, repeated transformations and scope checks passed.');

@@ -248,10 +248,8 @@
   function renderCurrent() {
     byId('detail').hidden = !current || (!variants.length && current.schema !== 'bond-atlas/3' && !current.conformers?.length);
     ui(byId('current-name'),()=>app?.state?.selected ? tr('stereo.workspace','Workspace selection: {name}',{name:app.state.selected.name || app.state.selected.notation || tr('common.structure','structure')}) : tr("stereo.selectPrompt",'Select a structure in the workspace, or enter SMILES.'));
-    if (current) {
-      ui(byId('detail-label'),()=>(current.name || tr("stereo.selected",'Selected structure')) + ' · ' + stereoLabel(current));
-      renderConformers(); fillProjectionChoices();
-    }
+    ui(byId('detail-label'),()=>current ? (current.name || tr("stereo.selected",'Selected structure')) + ' · ' + stereoLabel(current) : '');
+    renderConformers(); fillProjectionChoices();
     updateControls();
   }
   function renderVariants() {
@@ -528,7 +526,7 @@
     } catch (e) { error(()=>detail(e.message)); }
   });
   document.addEventListener('bondatlas:selection', event => {
-    if (internalLoad || !event.detail?.molecule) return;
+    if (internalLoad || !event.detail || !('molecule' in event.detail)) return;
     const m = event.detail.molecule;
     // Selection only updates local controls. It never enumerates, reloads, or requests a projection.
     cancelDetails(); abortLane('enumerate'); current = m; resetProjection();

@@ -17,6 +17,12 @@
   entry('carbonyl-hydride', 'Reduction by hydride addition', 'Sodium borohydride', 'CCC=O', ...carbonyl);
   entry('carbonyl-cyanide', 'Hydroxynitrile formation', 'Hydrogen cyanide and cyanide ion', 'CC=O', ...carbonyl);
 
+  // Match the service's base-atom budget for both the starting graph and the
+  // organic product that the viewer will reparse. Explicit H vertices are out of scope.
+  const maxAtoms = 256;
+  const growth = {'alkene-hbr':1,'alkene-hydration':1,'alkene-h2so4-hydrolysis':1,
+    'alkene-br2':2,'alkene-h2so4':5,'carbonyl-cyanide':2};
+  const fits = (id,n) => n + (growth[id] || 0) <= maxAtoms;
   const reject = reason => ({reason});
   const step = (title, from, to, detail) => ({title, scheme:`${from} → ${to}`, detail});
   const valence = {C:4, N:3, O:2, F:1, Cl:1, Br:1, I:1};
@@ -32,11 +38,14 @@
   function inspect(r) {
     if (!r || !Array.isArray(r.atoms) || !Array.isArray(r.bonds) || !Array.isArray(r.hydrogens)) return null;
     const n = r.atoms.length;
-    if (!n || n > 64 || r.hydrogens.length !== n || r.bonds.length > 2*n || r.charge || r.radical ||
-        /[@/\\\[\]|]/.test(r.notation || '')) return null;
-    if (r.stereo != null && (!Array.isArray(r.stereo.centers) || !Array.isArray(r.stereo.bonds) ||
-        r.stereo.unsupported?.length || [...r.stereo.centers,...r.stereo.bonds].some(s => !s || s.specified !== false))) return null;
-    for (const k of ['charges','isotopes','radicals','radicalElectrons']) {
+    if (!n || n > maxAtoms || r.hydrogens.length !== n || r.bonds.length > 2*n || r.charge || r.formalCharge || r.radical || r.aromatic ||
+        (r.notation != null && (typeof r.notation !== 'string' || r.notation.length > 1024 || /[@/\\\[\]|.]/.test(r.notation)))) return null;
+    if (r.stereo != null) {
+      const s=r.stereo;
+      if (!Array.isArray(s.centers) || s.centers.length > n || !Array.isArray(s.bonds) || s.bonds.length > r.bonds.length ||
+          (s.unsupported != null && (!Array.isArray(s.unsupported) || s.unsupported.length))) return null;
+    }
+    for (const k of ['charges','formalCharges','isotopes','radicals','radicalElectrons']) {
       if (k in r && !(Array.isArray(r[k]) && r[k].length === n && Array.from(r[k]).every(v => v === 0))) return null;
     }
     const g = [];
@@ -53,6 +62,9 @@
           edge.aromatic || edge.stereo || edge.direction) return null;
       connect(g,a,b,order);
     }
+    for (const c of r.stereo?.centers || []) if (!c || c.specified!==false || c.cip || !valid(c.atom) || g[c.atom].e!=='C') return null;
+    for (const b of r.stereo?.bonds || []) if (!b || b.specified!==false || b.descriptor || b.cisTrans || !valid(b.a) || !valid(b.b) ||
+        g[b.a].e!=='C' || g[b.b].e!=='C' || g[b.a].edges.get(b.b)!==2) return null;
     if (g.some(v => [...v.edges.values()].reduce((s,o) => s+o,v.h) !== valence[v.e])) return null;
     const seen = new Set([0]);
     for (const i of seen) for (const j of next(g,i)) seen.add(j);
@@ -62,7 +74,23 @@
   // Canonical condensed formula of a tree. Longest carbon path first; tied paths
   // are ordered by their text, not by the input atom or bond numbering.
   function show(g, ringEnds=[], smiles=false) {
+    // Find the longest carbon paths before formatting anything. Memoized
+    // directed-edge depths avoid spelling out a whole molecule at every atom.
+    const depths = new Map(), key = (i,parent) => i*(g.length+1)+parent+1;
+    function depth(i,parent) {
+      if (g[i].e !== 'C') return 0;
+      const k=key(i,parent);
+      if (!depths.has(k)) {
+        let best=0;
+        for (const j of g[i].edges.keys()) if (j!==parent) best=Math.max(best,depth(j,i));
+        depths.set(k,best+1);
+      }
+      return depths.get(k);
+    }
+    const written = new Map();
     function walk(i,parent) {
+      const k=key(i,parent);
+      if (written.has(k)) return written.get(k);
       const {e,h,q,edges} = g[i];
       const hText = h ? 'H'+(h > 1 ? h : '') : '';
       const label = e+hText+(q > 0 ? '+' : q < 0 ? '-' : '');
@@ -70,17 +98,23 @@
       let text = (q || ring ? '['+label+']' : smiles ? e : label)+(ring ? '1' : '');
       const children = next(g,i).filter(j => j !== parent).map(j => {
         const child = walk(j,i);
-        child.text = ['','','=',smiles ? '#' : '≡'][edges.get(j)] + child.text;
-        return child;
+        return {depth:child.depth,text:['','','=',smiles ? '#' : '≡'][edges.get(j)] + child.text};
       }).sort((a,b) => b.depth-a.depth || Number(a.text.startsWith('='))-Number(b.text.startsWith('=')) || compare(a.text,b.text));
       const [main,...branches] = children;
       text += branches.map(c => '('+c.text+')').join('') + (main?.text || '');
-      return {text, depth:e === 'C' ? 1+(main?.depth || 0) : 0};
+      const path={text, depth:e === 'C' ? 1+(main?.depth || 0) : 0};
+      written.set(k,path);
+      return path;
     }
-    const paths = g.flatMap((v,i) => v.e === 'C' ? [walk(i,-1)] : []);
-    const branchCount = s => s.split('(').length-1;
-    paths.sort((a,b) => b.depth-a.depth || branchCount(a.text)-branchCount(b.text) || compare(a.text,b.text));
-    return paths[0].text;
+    const roots = g.map((v,i) => v.e==='C' && next(g,i).filter(j=>g[j].e==='C').length <= 1 ? depth(i,-1) : 0);
+    const longest=Math.max(...roots);
+    let best, fewest=Infinity;
+    roots.forEach((d,i) => {
+      if (d!==longest) return;
+      const text=walk(i,-1).text, branches=text.split('(').length-1;
+      if (branches<fewest || branches===fewest && text<best) { best=text; fewest=branches; }
+    });
+    return best;
   }
   const productSmiles = g => show(g,[],true);
   function compare(a,b) { return a < b ? -1 : a > b ? 1 : 0; }
@@ -112,8 +146,7 @@
     return neighbours.some(j => Math.min(3,carbons(j).length) > neighbours.length);
   }
 
-  function alkene(id,g,a,b,group) {
-    const substrate = show(g);
+  function alkene(id,g,a,b,group,chosenCarbon=null,substrate=show(g)) {
     connect(g,a,b,1);
     if (id === 'alkene-br2') {
       // Render the bridge as a single ring closure: matching 1s denote the third bond.
@@ -131,10 +164,10 @@
     }
     // Test both carbocations for equivalence before breaking a substitution tie.
     const cation = (c,h) => { g[c].q++; g[h].h++; const s=show(g); g[c].q--; g[h].h--; return s; };
-    if (g[a].h === g[b].h && cation(a,b) !== cation(b,a)) return reject('ambiguous');
-    const [c,h] = g[a].h <= g[b].h ? [a,b] : [b,a];
-    if (canRearrange(g,c)) return reject('ambiguous');
-    const regio = g[a].h === g[b].h ? 'The alkene ends are constitutionally equivalent.' :
+    if (chosenCarbon==null && g[a].h === g[b].h && cation(a,b) !== cation(b,a)) return reject('ambiguous');
+    const [c,h] = (chosenCarbon==null ? g[a].h <= g[b].h : chosenCarbon===a) ? [a,b] : [b,a];
+    if (chosenCarbon==null && canRearrange(g,c)) return reject('ambiguous');
+    const regio = chosenCarbon!=null ? `Follow the route with H added at parent C${h+1} and positive charge at C${c+1}. Carbocation substitution can favour one direction; no ratio or rearranged product is predicted.` : g[a].h === g[b].h ? 'The alkene ends are constitutionally equivalent.' :
       'The route shown favours the more substituted carbocation (Markovnikov addition); it does not predict an exclusive product.';
     g[c].q++; g[h].h++;
     const ion = show(g), hydration = id === 'alkene-hydration', hbr = id === 'alkene-hbr';
@@ -204,8 +237,8 @@
     return {group,stages,products:alk+' + H2O',productSmiles:smiles};
   }
 
-  function addToCarbonyl(id,g,c,o,group) {
-    const substrate = show(g), cn = id === 'carbonyl-cyanide';
+  function addToCarbonyl(id,g,c,o,group,substrate=show(g)) {
+    const cn = id === 'carbonyl-cyanide';
     connect(g,c,o,1); g[o].q = -1;
     if (cn) append(g,append(g,c,'C'),'N',0,0,3); else g[c].h++;
     const alkoxide = show(g);
@@ -227,12 +260,59 @@
     if (!g) return reject('unsupported');
     const {group} = rule, site = find(record,g,group);
     if (site.reason) return site;
+    if (!fits(id,g.length)) return reject('unsupported');
     const {c,x} = site;
     if (group === 'Alkene') return alkene(id,g,c,x,group);
     if (group === 'Aldehyde or ketone') return addToCarbonyl(id,g,c,x,group);
     return eliminate(g,c,x,group);
   }
-  const api = {entries,run};
+  const copyGraph = g => g.map(v=>({...v,edges:new Map(v.edges)}));
+  // Compare opposite protonations of a single internal alkene. Exclude primary
+  // carbocations and deduplicate orientations before offering alternative routes.
+  function directions(id,record){
+    if(!['alkene-hbr','alkene-hydration','alkene-h2so4','alkene-h2so4-hydrolysis'].includes(id))return [];
+    const g=inspect(record);if(!g || !fits(id,g.length))return [];const {c,x}=find(record,g,'Alkene');
+    if(c==null||g[c].h>1||g[x].h>1)return [];
+    const substrate=show(g);
+    const variants=[c,x].map(carbon=>{
+      const h=carbon===c?x:c,route=alkene(id,copyGraph(g),c,x,'Alkene',carbon,substrate);
+      return {...route,label:`H onto C${h+1}: ${route.productSmiles}`,sites:`H adds to parent C${h+1}; the nucleophile bonds at C${carbon+1}.`,siteChoices:[{carbon:carbon+1,protonatedCarbon:h+1}]};
+    });
+    return variants[0].productSmiles===variants[1].productSmiles?[]:variants;
+  }
+  // Isolated carbonyls and isolated alkenes can be followed independently. Do not
+  // extrapolate these arrows to a conjugated system or to an acid derivative.
+  function independentSites(id,record){
+    const hydride=id==='carbonyl-hydride',bromine=id==='alkene-br2';if(!hydride&&!bromine)return [];
+    const g=inspect(record);if(!g || !fits(id,g.length) || record.bonds.length!==g.length-1)return [];
+    if(g.some(v=>!(hydride?['C','O']:['C','Br']).includes(v.e)))return [];
+    // Allow ordinary alcohol/ether spectators (including a previously reduced
+    // carbonyl). Do not carry peroxides, hemiacetals or acid derivatives through.
+    if(hydride && g.some((v,i)=>v.e==='O' && ![...v.edges.values()].includes(2) &&
+      next(g,i).some(c=>g[c].e!=='C' || [...g[c].edges.values()].some(o=>o!==1) ||
+        next(g,c).some(j=>j!==i && g[j].e!=='C'))))return [];
+    const doubles=record.bonds.filter(b=>b.order!==1);if(!doubles.length||doubles.some(b=>b.order!==2))return [];
+    const ends=new Set(doubles.flatMap(b=>[b.a,b.b]));
+    if(ends.size!==2*doubles.length || record.bonds.some(b=>b.order===1&&ends.has(b.a)&&ends.has(b.b)))return [];
+    const candidates=[];
+    for(const {a,b} of doubles){
+      const [c,x]=g[a].e==='C'?[a,b]:[b,a];
+      if(g[c].e!=='C'||g[x].e!==(hydride?'O':'C'))return [];
+      if(hydride && next(g,c).some(j=>j!==x&&g[j].e!=='C'))return [];
+      if(bromine && [c,x].some(i=>next(g,i).some(j=>g[j].e!=='C')))return [];
+      candidates.push([c,x]);
+    }
+    const group=bromine?'Alkene':'Aldehyde or ketone',found=new Map(),substrate=show(g);
+    for(const [c,x] of candidates){
+      const route=hydride?addToCarbonyl(id,copyGraph(g),c,x,group,substrate):alkene(id,copyGraph(g),c,x,group,null,substrate);
+      const choice=hydride?{carbon:c+1,oxygen:x+1}:{carbon:c+1,alkeneCarbon:x+1};
+      if(!found.has(route.productSmiles))found.set(route.productSmiles,{...route,label:route.productSmiles,siteChoices:[],stereo:'connectivity only'});
+      found.get(route.productSmiles).siteChoices.push(choice);
+    }
+    for(const r of found.values())r.sites=r.siteChoices.map(s=>hydride?`C${s.carbon}=O${s.oxygen}`:`C${s.carbon}=C${s.alkeneCarbon}`).join(' or ')+'. One site reacts; the other groups stay in place. Only connectivity is shown.';
+    return [...found.values()];
+  }
+  const api = {entries,run,directions,independentSites};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.ReactionAddition = api;
 })(typeof window !== 'undefined' ? window : globalThis);

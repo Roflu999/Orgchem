@@ -14,7 +14,7 @@ from typing import Any
 
 from . import opsin
 
-OPERATIONS = {"parse", "enumerate", "conformers", "projection", "torsion", "export", "relationship", "name"}
+OPERATIONS = {"plate-carbonyl", "parse", "enumerate", "conformers", "projection", "torsion", "export", "relationship", "name"}
 TERMINAL = {"complete", "failed", "cancelled", "timed_out"}
 
 

@@ -10,19 +10,50 @@ The product is now named **Orgchem Visualizer**. Existing `bond-atlas/2` and `bo
 
 ## Run locally
 
-Use **Python 3.13** and a modern browser. No chemistry API key, Node/npm installation, or cloud account is needed to run the app.
+### Windows: first run with Command Prompt
+
+The app runs on your own PC and opens in a browser such as Edge, Chrome or Firefox. You'll need **Python 3.13** and internet access for the first installation. You don't need Git, Node.js, Docker or an API key.
+
+1. **Install Python 3.13.** Get the [Python install manager for Windows](https://www.python.org/downloads/windows/) and install it. Open the Windows **Start** menu, type `cmd`, and select **Command Prompt**. Type each line below and press **Enter**. If you already have Python, try the second line first; if it reports `Python 3.13.x` (where `x` is a number), you're ready.
+
+   ```bat
+   py install 3.13
+   py -3.13 --version
+   ```
+
+2. **Download and unpack the app.** On the [Orgchem repository](https://github.com/Roflu999/Orgchem), choose **Code → Download ZIP**. In File Explorer, right-click the downloaded ZIP, choose **Extract All…**, then **Extract**. Open the extracted folders until you see `run_local.py` alongside `requirements.txt` and the `vendor` folder. Keep the whole folder together; don't double-click the HTML file.
+
+3. **Start the app from that folder.** In that File Explorer window, click the **address bar** (not the search box), type `cmd`, and press **Enter**. This opens a Command Prompt in the right folder, even if its path contains spaces. Run:
+
+   ```bat
+   py -3.13 run_local.py
+   ```
+
+   On first run, the launcher creates a `.venv` folder for this app and installs the packages in `requirements.txt`, including RDKit. This can take several minutes with no new output. You don't need to run `pip` or activate anything yourself.
+
+4. **Open the workspace.** When Command Prompt prints `Orgchem Visualizer: http://127.0.0.1:8000`, open **[http://127.0.0.1:8000](http://127.0.0.1:8000)** in your browser. No tab opens automatically. You should see the model workspace; try **Move an oxygen** to compare ethanol and dimethyl ether. Keep Command Prompt open while using the app. That address works only on the computer running it.
+
+**Stop and restart:** Export any work you want to keep. Click the Command Prompt window running the app and press **Ctrl+C**. Closing the browser alone doesn't stop it. To start again, repeat steps 3 and 4 using the same extracted folder. A normal restart reuses the installed packages without another download.
+
+**If something goes wrong:**
+
+| What you see | What to do |
+| --- | --- |
+| `py` isn't recognized, or Python 3.13 isn't found | Open a new Command Prompt after installing the Python install manager, then repeat step 1. If `python --version` already reports `Python 3.13.x`, you can use `python run_local.py` instead. Other Python versions won't run this launcher. |
+| Python says it can't open `run_local.py` | Type `dir run_local.py`. If the file isn't listed, return to the **extracted** folder containing it and open Command Prompt from its address bar. |
+| Runtime installation failed | Check your internet connection and free disk space, then run `py -3.13 run_local.py --install`. If it still fails, see [Local setup](LOCAL_SETUP.md) for manual diagnostics; compatible packages must be available for your OS and processor. |
+| Port 8000 is in use, or the browser can't connect | Check that the command is still running and that you opened the printed **http** address. If the server exited because the port is busy, run `py -3.13 run_local.py --port 8001` and open [http://127.0.0.1:8001](http://127.0.0.1:8001). |
+
+### macOS and Linux
+
+Install Python 3.13 with `venv` support. Download and extract the ZIP as above, then open a terminal in the folder containing `run_local.py`. If you prefer Git, use `git clone https://github.com/Roflu999/Orgchem.git` and `cd Orgchem` instead. Run:
 
 ```sh
-git clone https://github.com/Roflu999/Orgchem.git
-cd Orgchem
+python3.13 --version
 python3.13 run_local.py
 ```
 
-On Windows: `py -3.13 run_local.py`. The first run explicitly creates an isolated `.venv` and installs pinned runtime dependencies, so it needs network access to a Python package index. Subsequent successful runs do not invoke the installer. Existing environments are inspected, never erased or silently upgraded. Open **http://127.0.0.1:8000** and stop with Ctrl+C. Use `--port 8080` for another loopback port.
-
-See **[Local setup](LOCAL_SETUP.md)** for fresh-clone commands, Windows/macOS/Linux instructions, manual virtual-environment setup, updates, optional Docker, and verification limits. Node and Playwright are optional development/test tools only. Do not open the HTML through `file://`: the Python server supplies the app and chemistry API together.
-
-The pinned 3Dmol.js renderer and all interface fonts—including Latin, Arabic and Chinese subsets—are vendored with their licenses. The interface makes no font-CDN requests and remains usable offline after runtime dependencies have been installed. Calculations use **this website’s server**, not a third-party chemistry API. See [third-party notices](THIRD_PARTY.md).
+Open the printed address and stop with **Ctrl+C**, just as on Windows. See [Local setup](LOCAL_SETUP.md) for manual installation, updates, optional Docker and platform verification limits. The renderer and fonts are bundled, so local chemistry and viewing don't require internet access after setup. Optional PubChem lookups do.
 
 ## Interface languages and accessibility
 
@@ -62,23 +93,38 @@ Methods, energy units, relative energies, convergence, seed and warnings remain 
 
 The landing page is a model canvas with an editable list alongside it (below it on phones). Enter an English compound name or SMILES; duplicate a row, replace the text, or hide it to compare up to eight models. Try `ethanol` and `dimethyl ether` in 2D, or `ethane` and `hexane` in 3D. Sketches are schematic. The 3D scene fits the **whole collection**, not each molecule individually: all visible models use one orthographic scale and the gaps between models have no chemical meaning.
 
+Try **Move an oxygen** (ethanol and dimethyl ether), **Branch a chain** (pentane and 2-methylbutane), or **Look in a mirror** (the two enantiomers of lactic acid). Each starter replaces the list with two editable, selected molecules; **Undo** brings your list back. To compare a pair you entered yourself, show both rows and check their boxes. For the three curated pairs the models mark the part to look at; open **What changed?** for the explanation. Other pairs still work side by side, without an automatic claim about how they differ.
+
 Use **Remove** on one row, or check several rows and choose **Remove selected**. **Select all** includes hidden molecules. **Undo** and **Redo**, next to the Molecules heading, step through the last 32 list changes: adding or duplicating rows, editing inputs, hiding or showing models, removing a batch, and applying an atom edit. One undo restores a removed group in its original order and visibility. A fresh edit clears redo. Outside text fields, use Ctrl/Cmd+Z to undo and Ctrl/Cmd+Shift+Z or Ctrl+Y to redo; inside a field, native text editing shortcuts are preserved.
 
-To remove atoms from a model, choose **Edit atoms** on its row. Use **Erase** for one atom, or choose **Select atoms**, tap the atoms (or Tab to each and press Space), then **Delete selection**. Attached bonds are removed too. **Undo** restores the whole batch in the sketch. **Apply to molecule** updates just the originating row; **Back without applying** leaves it unchanged. If no atoms remain, the apply button explicitly offers to remove the molecule instead.
+To remove atoms from a model, choose **Edit atoms** on its row. Use **Erase** for one atom, or choose **Select atoms**, tap the atoms (or Tab to each and press Space), then **Delete selection**. Attached bonds are removed too. **Undo** restores the whole batch in the sketch. **Apply to molecule** updates the originating row. To see a before-and-after instead, choose **Keep original and compare**: it puts the changed structure beside the original as a new row. **Back without applying** discards the edit. If no atoms remain, the apply button explicitly offers to remove the molecule instead.
 
-Expand **Measurements** on a generated row for bond lengths and the largest atom-center separation, including hydrogen, in ångströms. These are calculated distances for that conformer, not experimental measurements or a surface diameter. Unsupported geometry, disconnected fragments and unspecified stereochemistry do not receive invented lengths. Editing a row clears its old measurements immediately. Local 2D previews work without the server; generating checked 3D coordinates needs the same-origin RDKit service. Workspace rows last until reload; sketchpad draft recovery is separate.
+Expand **Measurements** on a generated row for bond lengths and the largest atom-center separation, including hydrogen, in ångströms. These are calculated distances for that conformer, not experimental measurements or a surface diameter. Unsupported geometry, disconnected fragments and unspecified stereochemistry do not receive invented lengths. Editing a row clears its old measurements immediately. Local 2D previews work without the server; generating checked 3D coordinates needs the same-origin RDKit service. Workspace rows are not saved automatically. Use the workspace file controls to download `workspace.orgchem.json` or, where supported, choose a local file with **Save as**. Open the file later to restore the row inputs (including applied sketch edits), order, visibility, selection, and 2D/3D mode. Opening is undoable. The file stores the workspace, not calculated geometry or an unapplied sketch; 3D coordinates are recalculated as needed. Sketchpad draft recovery and single-molecule MOL/SDF export are separate.
 
 ## Reagents and electron flow
 
-Open **Reagents** and enter a starting molecule. Reagents that match its connectivity appear first. If more than one pathway matches (try `CCBr` with hydroxide), the pathway selector lets you compare them; order does not indicate yield. **Browse worked examples** loads a reagent and substrate together. **Next step** is manual; **Play steps** is optional and respects reduced motion. Products, intermediates and explanations are in English. No reagent is applied to, or consumed from, the model desk.
+Open **Reagents**, enter a starting molecule, choose a reagent and **Conditions**, then select **Run reaction**. Reagents that match the structure appear first. Try bromoethane (`CCBr`) with hydroxide: warm aqueous conditions favour substitution to ethanol; hot ethanolic conditions favour elimination to ethene. These are the pathways emphasised at A level, not exclusive products. Choose **Use organic product as starting molecule** to continue with a supported product without changing the model workspace. For example, oxidise the ethanol and compare distilling off ethanal with heating under reflux with excess oxidant to form ethanoic acid. **Browse worked examples** opens a substrate, reagent and matching setup together. **Next step** is manual; **Play steps** is optional and respects reduced motion. Products, intermediates and explanations are in English. No reagent is applied to, or consumed from, the model desk.
 
-The first syllabus is [AQA A-level Chemistry 7405](https://filestore.aqa.org.uk/resources/chemistry/specifications/AQA-7404-7405-SP-2015.PDF), not a claim of universal exam-board coverage:
+**Cambridge International 9701 reaction plates:** Open **Reagents → Reaction plates**. Add a worked pair, or prepare a substrate and reagent separately. Choose aqueous, ethanolic or no added solvent; select the two plates and conditions, then **Check pathways → Create product plate**. The new plate holds the selected isolated organic product and records its parents. Both parents remain unchanged, so you can collect a different branch or use the child in another reaction. The rack holds 48 plates for the current session; the model workspace file does not save the rack. A solvent or catalyst can also be prepared separately: for example, combine a hydrogen reagent plate and a nickel catalyst plate at room temperature to make a prepared reagent plate, then pair it with propene and select heat.
+
+The ten worked pairs include two ways to oxidise a primary alcohol: distil off the aldehyde or reflux with excess oxidant to form the carboxylic acid. Other pairs include borohydride reduction of propanone and cyclohexanone, nickel-catalysed hydrogenation of propene and reduction of a nitrile to an amine. Water and methane can be selected by name or entered as `H2O` and `CH4`; water is a reagent in acyl chloride hydrolysis and a solvent in aqueous substitution. Methane is an organic substrate in the UV chlorination example, not a catalyst. These are illustrations of selected syllabus chemistry, not a complete reaction or mixture predictor.
+
+**Inspect a structure:** Open a plate or the guide's starting structure and focus on an atom or region in the 2D drawing without waiting for 3D. The degree of unsaturation (DBE) compares the formula with its saturated, acyclic counterpart: one unit means two fewer hydrogen atoms. Either a ring or a double bond can account for one unit; DBE alone doesn't tell you which. Choose **Show 3D** to request one verified conformer, then drag or use the arrow keys to rotate.
+
+**Size limits:** With the local RDKit service, the guide accepts up to 256 base atoms (explicit hydrogen vertices count; generated display hydrogens do not). The offline interpreter still has a 64-heavy-atom limit. Eligible acyclic site transformations now use the larger budget for both parent and product; other rules can have tighter limits. Plate borohydride reduction also covers selected cyclic and aryl aldehydes/ketones, without assigning the new stereocentre. A structure may be viewable even when no reaction matches. Unresolved stereochemistry, a failed conformer calculation or unavailable WebGL leaves the 2D drawing available.
+
+**Study a mechanism:** Select an AQA 7405, Cambridge International 9701, Pearson Edexcel UK 9CH0, IB core, IB HL, or Olympiad reading list. Each filters **Browse worked examples**, not which reactions the simulator will allow. Open a lesson to see its diagnostic feature, mechanistic reasoning and a common mistake alongside the worked reaction. The IB lists refer to first assessment 2025. These are selected study topics, not complete or endorsed syllabuses. The Olympiad list includes original multi-part problems with optional hints, worked solutions and buttons to try the relevant chemistry; isotope and analytical data in the questions are paper exercises, not simulated measurements.
+
+**Compare reaction sites:** Try **Eliminate from 2-bromobutane**. Choose but-1-ene, (E)-but-2-ene or (Z)-but-2-ene and open the numbered parent diagram to identify the carbon losing H. The numbers are diagram IDs, not IUPAC locants. For larger starting molecules, the site map initially shows the area around the selected reaction site rather than shrinking the whole parent to fit. Equivalent sites share a product; their individual positions remain selectable. **Oxidise one end of an asymmetric diol** instead to make either mono-oxidised product, then use that product as the next starting molecule and react the other OH. The guide also compares direct addition orientations for supported internal alkenes and one-site-at-a-time reductions of isolated carbonyls or bromine additions to isolated alkenes. It does not assign yields, handle every functional-group interaction, or infer missing stereochemistry.
+
+The original mechanism collection follows [AQA A-level Chemistry 7405](https://filestore.aqa.org.uk/resources/chemistry/specifications/AQA-7404-7405-SP-2015.PDF), not a claim of universal exam-board coverage:
 
 | AQA section | Mechanisms represented |
 |---|---|
 | 3.3.2.4 | Alkane chlorination: initiation, two propagation steps, termination |
 | 3.3.3.1–2; 3.3.11.3 | Haloalkane substitution with hydroxide, cyanide, ammonia and amines up to a quaternary salt; competing elimination |
 | 3.3.4.2; 3.3.5.1, 3.3.5.3 | Alkene addition with HBr, bromine or sulfuric acid; acid-catalysed hydration and alcohol dehydration |
+| 3.3.5.2 | Alcohol oxidation: primary to aldehyde or acid, secondary to ketone; no oxidation of tertiary alcohols under these conditions. These are net transformations, not elementary mechanisms. |
 | 3.3.8 | Carbonyl addition of hydride or cyanide followed by proton transfer |
 | 3.3.9.2; 3.3.11.3 | Acyl chloride addition–elimination with water, alcohol, ammonia or primary amine; anhydride examples also available |
 | 3.3.10.2 | Benzene nitration and Friedel–Crafts acylation, including electrophile generation and recovery of aromaticity |
@@ -186,7 +232,7 @@ Known counts retained by regression tests include C₂H₆O = 2, C₄H₁₀O = 
 
 ## Verification
 
-For the lightweight live interaction check against the local server, see [DOM check setup and scope](BROWSER_CHECK.md). It exercises the formula and naming flows without claiming to test pixels, WebGL or native screen-reader behavior.
+For a task-by-task assessment of how easy the workspace is to use, see the [usability and visual clarity report](UI_CHECK.md). For the lightweight live interaction check against the local server, see [DOM check setup and scope](BROWSER_CHECK.md). It exercises the formula and naming flows without claiming to test pixels, WebGL or native screen-reader behavior.
 
 ```sh
 node test.js

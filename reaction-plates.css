@@ -1,0 +1,23 @@
+#plate-lab {margin:.6rem 0; border:1px solid var(--line); border-inline-start:4px solid var(--accent); background:var(--surface); border-radius:.45rem; color:var(--ink)}
+#plate-lab>summary {padding:1rem clamp(.8rem,2vw,1.6rem);cursor:pointer}
+#plate-lab>summary strong {font-family:var(--display);font-size:1.35rem;margin-inline:.75rem}
+#plate-lab>summary span:last-child,.plate-note,#plate-count {color:var(--muted);font-size:.875rem}
+.plate-bench {padding:0 clamp(.8rem,2vw,1.6rem) 1rem; min-width:0}
+.plate-bench section,.plate-grid>section,.plate-fields>* {min-width:0}
+.plate-starters {display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;border-block:1px solid var(--line);padding:.8rem 0}
+.plate-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(1rem,3vw,3rem);margin-top:1rem}
+.plate-bench h2 {font:600 1.25rem var(--display);margin:.5rem 0 .8rem}
+.plate-bench label {font-weight:600;font-size:.9rem}
+#plate-form,.plate-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem .8rem;align-items:end}
+#plate-form label,.plate-fields label,#plate-outcomes label,#plate-inspector label {display:grid;gap:.25rem;min-width:0}
+#plate-form [hidden],#plate-lab [hidden] {display:none}
+.plate-bench select,.plate-bench input {width:100%;min-width:0;max-width:100%;font:inherit;font-weight:400;border:1px solid var(--control-line);border-radius:.4rem;padding:.4rem;color:var(--ink);background:var(--surface)}
+.plate-starters select {width:auto;max-width:100%}
+#plate-outcomes {padding:.8rem;margin-top:.8rem;border-inline-start:3px solid var(--accent);background:var(--accent-soft);overflow-wrap:anywhere}
+#plate-status {padding:.65rem 0;border-block:1px solid var(--line);overflow-wrap:anywhere}
+#plate-rack {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr));padding:0;gap:.65rem;list-style:none}
+#plate-rack li {border:1px solid var(--line);padding:.8rem;border-radius:.45rem;overflow-wrap:anywhere;min-width:0}
+#plate-rack li p {margin:.25rem 0 .55rem;font-size:.875rem} #plate-rack li button+button {margin-inline-start:.5rem}
+#rx-inspect-details {margin-bottom:1rem} #rx-inspect-details summary {cursor:pointer;font-weight:600} #plate-inspector {padding:1rem 0;border-block:1px solid var(--line)}
+@media(max-width:760px){.plate-grid {grid-template-columns:minmax(0,1fr)} #plate-lab>summary span:last-child{display:block;margin-top:.3rem}}
+@media(max-width:440px){#plate-form,.plate-fields{grid-template-columns:minmax(0,1fr)} .plate-starters>*{width:100%}}

@@ -29,7 +29,7 @@ function fixture() {
       getRenderer:()=>({isLost:()=>Boolean(viewer.lost),getContext:()=>gl,getCanvas:()=>canvas}), setProjection(p){this.proj=p;},
       getView(){return this.view.slice();},setView(v){this.view=v;},setSlab(n,f){this.slab=[n,f];},
       addModel(){return {addAtoms:atoms=>this.models.push(atoms)};},removeAllModels(){this.models=[];},
-      setStyle(){},render(){},resize(){assert.ok(dims.width>0 && dims.height>0,'never resize hidden');},
+      styles:[],setStyle(selection,style){this.styles.push({selection,style});},render(){},resize(){assert.ok(dims.width>0 && dims.height>0,'never resize hidden');},
       zoom(f){this.view[3]=this.CAMERA_Z-(this.CAMERA_Z-this.view[3])/f;}};
     win.addEventListener('resize',()=>viewer.resize());
     doc.body.addEventListener('mouseup',()=>bodyEvents++); pane.append(canvas); return viewer;
@@ -89,6 +89,23 @@ function fitAndScale(f,rows) {
   canvas.dispatchEvent(new Event('webglcontextlost',{cancelable:true})); f.dims.height++; f.observer.fire();
   assert.ok(lost.length>=1); assert.match(lost[0].message,/WebGL/);
   canvas.dispatchEvent(new Event('webglcontextrestored')); assert.equal(f.count,2); fitAndScale(f,[small,big]); f.stage.destroy();
+}
+{
+  const f=fixture(); f.stage.draw3D([small]);
+  // The desk can have readable structures but zero conformers. An empty stage
+  // must not require WebGL, even after the last canvas lost its context.
+  f.viewer.lost=true;f.stage.draw2D([small]);
+  f.stage.draw3D([]);assert.equal(f.host.children[0].children[1].style.display,'none');
+  assert.equal(f.count,1);f.stage.draw3D([big]);assert.equal(f.count,2);
+  assert.equal(f.viewer.models.length,1);f.stage.destroy();
+}
+{
+  const f=fixture();
+  f.stage.draw3D([small,{...big,mark:{atom:1,side:'ether'}}]);
+  const targets=f.viewer.styles.filter(s=>'model' in s.selection);
+  assert.equal(targets.length,1);assert.deepEqual(targets[0].selection,{model:1,index:1});
+  assert(targets[0].style.sphere.radius>f.viewer.styles[0].style.sphere.radius);
+  f.viewer.styles=[];f.stage.draw3D([small,big]);assert(!f.viewer.styles.some(s=>'model' in s.selection));f.stage.destroy();
 }
 {
   const f=fixture(), svg='<svg xmlns="http://www.w3.org/2000/svg"><path id="stereo-wedge" d="M0 0 L10 3 L10 5 Z"/></svg>';

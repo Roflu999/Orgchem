@@ -19,7 +19,9 @@
   }
   function graphFromRecord(record) {
     if (!record || !Array.isArray(record.atoms) || !Array.isArray(record.bonds)) throw Error('JSON requires atoms and bonds arrays.');
-    if (record.charge || record.charges?.some(Boolean) || record.formalCharge || record.radical || record.stereo || record.isotope) throw Error('Charged, radical, isotopic or stereo-assigned JSON structures are not supported.');
+    const annotated = ['charges','isotopes','radicals','radicalElectrons'].some(key => record[key] != null &&
+      (!Array.isArray(record[key]) || record[key].length !== record.atoms.length || record[key].some(n => n !== 0)));
+    if (annotated || record.charge || record.formalCharge || record.radical || record.stereo || record.isotope) throw Error('Charged, radical, isotopic or stereo-assigned JSON structures are not supported.');
     if (record.atoms.length > 256 || record.bonds.length > 512) throw Error('This structure exceeds the import size limits.');
     const atoms = record.atoms.map(a => typeof a === 'string' ? a : a?.e || a?.elem);
     if (record.atoms.some(a => typeof a === 'object' && (a.charge || a.formalCharge || a.isotope || a.massNumber || a.stereo || a.cip || a.radical || a.radicalElectrons))) throw Error('Charged, isotopic, radical or stereo-assigned JSON atoms are not supported.');
@@ -67,11 +69,16 @@
     if(lines.length>MAX_RECORDS)throw Error('Import up to 500 structures at a time.');
     return lines.map((line,i)=>{const match=line.match(/^(\S+)(?:[ \t]+(.+))?$/);try{return C.describe(C.readSmiles(match[1]),match[2]?.slice(0,120));}catch(e){throw Error('SMILES line '+(i+1)+': '+e.message);}});
   }
+  // JSON collections contain records, whereas a bracket at the start of SMILES contains an atom.
+  function structureFormat(text) {
+    if (/^[^\n]*V(?:2000|3000)\s*$/m.test(text)) return text.includes('$$$$')?'sdf':'mol';
+    return /^\s*(?:\{|\[\s*(?:\{|\]))/.test(text)?'json':null;
+  }
   function parseData(text, format='auto', filename='') {
     guard(text);
     if(format==='auto') {
-      if(/V(?:2000|3000)/.test(text))format=text.includes('$$$$')?'sdf':'mol';
-      else if(/^\s*[\[{]/.test(text) && !/^\s*\[(?:Cl|Br|C|N|O|F|I|H)/.test(text))format='json';
+      const structured=structureFormat(text);
+      if(structured)format=structured;
       else if(/\.smi(?:les)?$/i.test(filename) || text.trim().includes('\n'))format='smiles';
       else if(C.looksLikeName(text))return parseEntry(text);
       else if(/[=#()\[\]]/.test(text))format='smiles';
@@ -111,7 +118,7 @@
   function writeJSON(isomers){return JSON.stringify({schema:'bond-atlas/2',note:'Connectivity only; no assigned stereochemistry. Priority scores are structural heuristics, not stability measurements.',isomers:isomers.map(g=>({name:g.name,formula:g.formula,atoms:g.atoms,bonds:g.bonds,hydrogens:g.hydrogens,smiles:g.notation,priority:g.stability}))},null,2);}
   function writeSMILES(isomers){return isomers.map(g=>g.notation+'\t'+safeName(g.name)).join('\n')+'\n';}
   function writeCSV(isomers){const quote=v=>'"'+String(v).replace(/^[=+\-@]/,"'$&").replace(/"/g,'""')+'"';return 'name,formula,SMILES,priority_score,priority_reasons\r\n'+isomers.map(g=>[g.name,g.formula,g.notation,g.stability.score,g.stability.reasons.join(' ')].map(quote).join(',')).join('\r\n')+'\r\n';}
-  const api={parseEntry,parseData,readMol,writeMol,writeSDF,writeXYZ,writeJSON,writeSMILES,writeCSV,MAX_BYTES};
+  const api={parseEntry,parseData,structureFormat,readMol,writeMol,writeSDF,writeXYZ,writeJSON,writeSMILES,writeCSV,MAX_BYTES};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   root.MoleculeFormats=api;
 })(typeof self!=='undefined'?self:globalThis);

@@ -4,6 +4,26 @@
 
 The Playwright cache held Chromium but no Firefox or WebKit; no Firefox or WebKit browser executable was found on PATH. Chromium has no usable OS sandbox here. No visual browser was launched and no screenshot was produced. Instead, jsdom 31.0.1 was installed under `browser-check/` with install scripts disabled. The DOM driver passed against the loopback site: startup stereoisomers, six benzene builder atoms, Arabic/English switching, formula deduction, filtered versus total counts, and a systematic name round trip. Each test server was stopped afterward. No browser sandbox or host policy was changed.
 
+**v3.4.0 checks:** The live DOM driver opens each curated pair and checks the marked atoms, exports the mirror pair as a workspace file, reads it back, and undoes the replacement. `node browser-check/row-compare.mjs` separately exercises before-and-after sketch editing without a server. Both passed for this release. `browser_ui.py` also exercises the browser's download manager and file input. Without the optional library root, Chromium could not find `libglib-2.0.so.0`; with the libraries present, it stopped at “No usable sandbox”. No native file dialog, real WebGL output, or mobile layout was verified here.
+
+For the cross-feature regression pass, run the following from the project root after installing the test dependencies. The live runner starts a fresh loopback-only server on an ephemeral port and shuts it down afterward (Linux/macOS):
+
+```sh
+node browser-check/import-interactions.mjs
+node browser-check/row-compare.mjs
+node test-workspace-file.js --desk
+node test-model-input.js --rdkit
+.venv/bin/python browser-check/run-live-dom.py
+```
+
+These cover delayed imports and file writes, row edits versus scratchpad history, missing conformers, mapped comparisons, locale changes with an empty filter, and generating Together coordinates without dropping the rest of a collection. File dialogs and graphics failures are simulated where a DOM implementation cannot provide the native behavior.
+
+## If Chromium reports `No usable sandbox!`
+
+On this managed Linux host, a user-namespace probe returned `Operation not permitted`; the cached Chrome helper is not a system-installed setuid helper. Both full Chromium and Headless Shell failed before navigation. Reinstalling Playwright or restarting the chemistry server does not change those host permissions. For a local sandboxed run, ask the environment owner for a browser-test environment with a supported Chromium sandbox.
+
+Alternatively, the `browser` job in `.github/workflows/ci.yml` is configured to run `browser_ui.py --reaction-phone --capture` on its Ubuntu VM with Chromium sandboxing enabled. After the workflow change is in the repository, run **Actions > Local app verification > Run workflow**. The browser job log shows whether the assertions passed; its `chromium-reaction-phone` artifact contains screenshots if the browser got far enough to capture them. A workflow edit alone is not a passing browser result.
+
 ## Run the DOM check locally
 
 Use a trusted checkout and its own loopback server. This requires the project's Python 3.13 environment (see `LOCAL_SETUP.md`) and Node compatible with jsdom (`^22.22.2`, `^24.15.0`, or `>=26`). Commands start at the project root. If an execution permission prompt is denied, stop there rather than rerouting the command.

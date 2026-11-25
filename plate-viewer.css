@@ -1,0 +1,17 @@
+.plate-viewer { min-width:0; color:var(--ink); }
+.plate-viewer h3 { margin:0 0 .5rem; overflow-wrap:anywhere; font-family:var(--display); }
+.plate-viewer-viewport { height:clamp(14rem,38vh,26rem); min-width:0; overflow:auto; border:1px solid var(--line); border-radius:.5rem; background:var(--stage); }
+.plate-viewer-viewport:focus-visible { outline:3px solid var(--focus-ring); outline-offset:2px; }
+.plate-viewer-stage { width:100%; height:100%; margin-inline:auto; }
+/* The shared stage normally keeps small diagrams at their native size. Here
+   the scrollable canvas grows with zoom, so outer branches remain reachable. */
+.plate-viewer-stage .model-stage-2d img { object-fit:contain !important; }
+.plate-viewer-tools { display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; margin-block:.6rem .25rem; }
+.plate-viewer-tools button { min-height:2.75rem; border:1px solid var(--control-line); background:var(--surface); color:var(--ink); }
+.plate-viewer-tools button:first-child { color:var(--accent-ink); background:var(--accent-soft); font-weight:650; }
+.plate-viewer-formula { margin:-.25rem 0 .55rem; color:var(--muted); font-size:.875rem; }
+.plate-viewer-formula:empty { display:none; }
+.plate-viewer-focus { display:inline-flex; align-items:center; gap:.4rem; min-width:0; max-width:100%; font-weight:600; }
+.plate-viewer-focus select { min-height:2.75rem; min-width:0; max-width:100%; color:var(--ink); background:var(--surface); border:1px solid var(--control-line); }
+.plate-viewer-status { margin:.4rem 0 0; font-size:.875rem; line-height:1.55; color:var(--muted); }
+.plate-viewer[hidden],.plate-viewer [hidden] { display:none !important; }

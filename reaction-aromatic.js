@@ -3,7 +3,7 @@
   'use strict';
   const benzene = 'C1=CC=CC=C1';
   const entries = [
-    {id:'radical-chlorination', label:'Free-radical chlorination', reagent:'Chlorine (UV light)', example:'C', group:'Alkane', section:'Free-radical substitution'},
+    {id:'radical-chlorination', label:'Free-radical chlorination', reagent:'Chlorine', example:'C', group:'Alkane', section:'Free-radical substitution'},
     {id:'benzene-nitration', label:'Nitration of benzene', reagent:'Nitric acid and sulfuric acid', example:benzene, group:'Arene', section:'Electrophilic substitution'},
     {id:'friedel-crafts-acylation', label:'Friedel-Crafts acylation', reagent:'Ethanoyl chloride and aluminium chloride', example:benzene, group:'Arene', section:'Electrophilic substitution'}
   ];

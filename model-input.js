@@ -63,6 +63,37 @@
     return {atoms, bonds, conformer, unit: ANGSTROM};
   }
 
+  // Given a parsed same-origin record, never reparse its canonical SMILES: that
+  // can change atom order and detach a selected site from its chemistry.
+  async function resolveMapped(mapped, {signal} = {}) {
+    check(signal);
+    root.MoleculeRecords.validate(mapped);
+    const blocked = geometryBlock(mapped);
+    if (blocked) return fallback(mapped, blocked);
+    const existing = selectedGeometry(mapped);
+    if (existing) return {record:mapped, geometry:existing, reason:null};
+    const client = root.ChemistryClient;
+    if (!client) return fallback(mapped, 'offline');
+    await wait(client.ready, signal); check(signal);
+    if (!client.available) return fallback(mapped, 'offline');
+    try {
+      // The mapped MOL block carries bonds, atom properties, stereochemistry
+      // and any supplied 3D frame. SVG depictions and layouts are not inputs.
+      const {schema, molblock, atoms, atomIds, charges, conformers, selectedConformerId} = mapped;
+      const molecule = {schema, molblock, atoms, atomIds, charges};
+      if (conformers?.length) Object.assign(molecule, {conformers, selectedConformerId});
+      const generated = await wait(client.job('conformers', {molecule, count:1}, {signal}), signal);
+      check(signal);
+      const next = root.MoleculeRecords.validate(generated.molecule);
+      if (next.stereoisomerId === mapped.stereoisomerId && next.atomIds.length === mapped.atomIds.length &&
+          next.atomIds.every((id,i) => id === mapped.atomIds[i] && next.atoms[i] === mapped.atoms[i])) {
+        const geometry = selectedGeometry(next);
+        if (geometry) return {record:next, geometry, reason:null};
+      }
+    } catch (e) { if (signal?.aborted || e?.name === 'AbortError') throw abortError(); }
+    return fallback(mapped, 'no-conformer');
+  }
+
   async function resolve(text, {signal} = {}) {
     check(signal);
     const request = input(text);
@@ -86,20 +117,9 @@
       if (!mapped.atoms.length) return fallback(record, reason);
       const label = fromName ? {name: legacy?.name || mapped.name, knownName: true, nameSource: legacy?.nameSource || mapped.nameSource} : {};
       record = {...mapped, ...label};
-      reason = geometryBlock(record);
-      if (reason) return fallback(record, reason);
       reason = 'no-conformer';
-      let geometry = selectedGeometry(record);
-      if (!geometry) {
-        const generated = await wait(client.job('conformers', {molecule: mapped, count: 1}, {signal}), signal);
-        check(signal);
-        const next = root.MoleculeRecords.validate(generated.molecule);
-        if (next.stereoisomerId !== mapped.stereoisomerId || next.atomIds.length !== mapped.atomIds.length || next.atomIds.some((id,i) => id !== mapped.atomIds[i])) return fallback(record, reason);
-        geometry = selectedGeometry(next);
-        if (!geometry) return fallback(record, reason);
-        record = {...next, ...label};
-      }
-      return {record, geometry, reason: null};
+      const resolved = await resolveMapped(mapped, {signal});
+      return {...resolved, record:{...resolved.record, ...label}};
     } catch (e) {
       if (signal?.aborted || e?.name === 'AbortError') throw abortError();
       return fallback(record, reason || 'no-conformer');
@@ -122,7 +142,7 @@
     return validPoint(p) && validPoint(q) ? distance(p, q) : null;
   }
 
-  const api = {preview, resolve, size, bondLength};
+  const api = {preview, resolve, resolveMapped, geometryBlock, selectedGeometry, size, bondLength};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.ModelInput = api;
 })(typeof window !== 'undefined' ? window : globalThis);

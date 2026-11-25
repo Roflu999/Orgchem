@@ -38,7 +38,7 @@ async function tests() {
   const calls = server();
   const model = await M.resolve('name: methanol');
   assert.equal(calls[0].text,M.preview('methanol').notation); assert.equal(calls[0].format,'smiles');
-  assert.equal(calls[1].op,'conformers'); assert.equal(calls[1].payload.count,1); assert.equal(calls[1].payload.molecule,mapped);
+  assert.equal(calls[1].op,'conformers'); assert.equal(calls[1].payload.count,1); assert.deepEqual(calls[1].payload.molecule.atomIds,mapped.atomIds); assert(!('depictions' in calls[1].payload.molecule));
   assert.equal(model.record.nameSource,M.preview('methanol').nameSource);
   assert.equal(model.geometry.conformer.id,model.record.selectedConformerId);
   assert.equal(model.reason,null); assert.equal(model.geometry.unit,'Å');
@@ -107,6 +107,29 @@ async function rdkitTests() {
     if (text.includes('@')) assert.equal(r.record.stereo.centers[0].specified,true);
     if (text.startsWith('F/')) assert.equal(r.record.stereo.bonds[0].descriptor,text.includes('\\')?'Z':'E');
   }
+  require('./comparison-mirrors.js');
+  const C = require('./model-comparisons.js');
+  // The legacy preview folds explicit H; the real mapped record and conformer retain it.
+  // Matching must survive that upgrade, without shifting the marked atom's 3D index.
+  for (const [starter,smiles] of [[0,['[H]OCC','[H]C([H])([H])OC']],
+    [1,['[H]CCCCC','[H]C(C)(C)CC']], [2,['[H][C@](O)(C)C(=O)O','O=C(O)[C@H](O)C']]]) {
+    const pair=[];
+    for (const text of smiles) {
+      const model=await M.resolve(text);
+      assert.equal(model.reason,null,text); pair.push(model);
+    }
+    const match=C.match(...pair.map(m=>m.record));
+    assert.equal(match?.id,C.starters[starter].id,smiles.join(' / '));
+    assert.deepEqual(match.marks.map(m=>m.side),C.starters[starter].sides);
+    for(const [i,{atom,side}] of match.marks.entries()) {
+      const {record,geometry}=pair[i];
+      assert.equal(geometry.atoms[atom].atomId,record.atomIds[atom]);
+      const neighbors=geometry.bonds.filter(b=>b.a===atom||b.b===atom).map(b=>geometry.atoms[b.a===atom?b.b:b.a].e);
+      if(starter===2) assert.equal(record.stereo.centers[0].atom,atom);
+      else assert.equal(neighbors.filter(e=>e==='C').length,{ethanol:1,ether:2,pentane:2,branched:3}[side]);
+    }
+  }
+  assert.equal(C.identify((await M.resolve('[2H]OCC')).record),null);
   for (const text of ['CC(O)F','FC=CF']) {
     const r = await M.resolve(text); assert.equal(r.reason,'unspecified-stereo',text); assert.equal(r.geometry,null);
     assert(r.record.depictions.skeletal.includes('<svg'));

@@ -92,6 +92,10 @@ test('imports reject invalid valence, annotations, truncation and mismatched for
   assert.throws(()=>F.parseData(JSON.stringify({atoms:['C'],bonds:[],formula:'C2H6'}),'json'),/formula/);
   assert.throws(()=>F.parseData(JSON.stringify({atoms:['C'],bonds:[],hydrogens:[3]}),'json'),/hydrogen/);
   assert.throws(()=>F.parseData(JSON.stringify({atoms:['C'],bonds:[],charge:1}),'json'),/Charged/);
+  for(const key of ['isotopes','radicalElectrons','radicals']) {
+    assert.throws(()=>F.parseData(JSON.stringify({atoms:['C'],bonds:[],[key]:[key==='isotopes'?13:1]}),'json'),/radical, isotopic/);
+    assert.equal(F.parseData(JSON.stringify({atoms:['C'],bonds:[],[key]:[0]}),'json').isomers[0].formula,'CH4');
+  }
   assert.throws(()=>F.parseData(JSON.stringify({atoms:['toString'],bonds:[]}),'json'),/Supported elements/);
   assert.throws(()=>F.parseData('x'.repeat(F.MAX_BYTES+1)));
 });
