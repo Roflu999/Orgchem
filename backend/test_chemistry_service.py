@@ -103,6 +103,13 @@ class ParsingTests(unittest.TestCase):
         self.assertNotEqual(parsed("[13CH4]")["id"], parsed("C")["id"])
         self.assertNotEqual(parsed("[NH4+]")["connectivityId"], parsed("N")["connectivityId"])
 
+    def test_plate_product_captions_follow_the_structure(self):
+        for smiles, name in [('C/C=C/C', '(E)-but-2-ene'), (r'C/C=C\C', '(Z)-but-2-ene'),
+                             ('CC=CC', 'But-2-ene'), ('C=CCC', 'But-1-ene'),
+                             ('O=CC', 'Ethanal'), ('OC(C)=O', 'Ethanoic acid (acetic acid)')]:
+            with self.subTest(smiles=smiles):
+                self.assertEqual(parsed(smiles)['name'], name)
+
     def test_school_hydrogen_deficiency_scope(self):
         for smiles, dbe in [('CCO', 0), ('CC=O', 1), ('C#N', 2), ('Clc1ccccc1', 4),
                             ('CSC', 0), ('[2H]C([2H])([2H])[2H]', 0), ('C.C', None),

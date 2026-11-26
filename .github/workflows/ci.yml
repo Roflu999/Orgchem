@@ -55,6 +55,7 @@ jobs:
           npm --prefix browser-check ci --ignore-scripts --no-audit --no-fund
           node browser-check/row-compare.mjs
           node browser-check/import-interactions.mjs
+          node test-plate-history.js --bench
           node test-workspace-file.js --desk
           node test-model-input.js --rdkit
           .venv/bin/python browser-check/run-live-dom.py
@@ -121,7 +122,7 @@ jobs:
           url = "http://127.0.0.1:8765"
           Path("/tmp/bond-atlas-browser").mkdir(parents=True, exist_ok=True)
           for suite in (["browser_ui.py", "--reaction-phone", "--capture", "--screenshots", "browser-results/reaction-phone"],
-                        ["browser_smoke.py"], ["browser_integration.py"], ["browser_ui.py"]):
+                        ["browser_ui.py", "--plate-workspace"], ["browser_smoke.py"], ["browser_integration.py"], ["browser_ui.py"]):
               print(f"Running {' '.join(suite)} against a fresh local server", flush=True)
               server = subprocess.Popen([
                   sys.executable, "serve.py", "--host", "127.0.0.1", "--port", "8765"

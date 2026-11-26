@@ -1,26 +1,32 @@
 'use strict';
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const F = require('./workspace-file.js');
-const state = {view:{mode:'3d',benzene:'cloud'},rows:[
+const F = require('./workspace-file.js'), history = require('./plate-history.js');
+const bench = {serial:4,plates:[{id:'4',role:'substrate',label:'ethanol',smiles:'CCO',stockId:'',medium:'',catalyst:'',history:null}],left:'4',right:'',condition:'heat'};
+const state = {bench,view:{mode:'3d',benzene:'cloud'},rows:[
   {id:7,input:'C[C@H](F)CC',visible:true,picked:true},
   {id:3,input:' [13CH3][O-] ',visible:false,picked:true},
   {id:9,input:'',visible:true,picked:false}]};
 const decoded = F.parse(F.serialize(state));
-assert.equal(decoded.format,'orgchem-workspace');assert.equal(decoded.version,1);
-assert.deepEqual(decoded.view,state.view);assert.deepEqual(decoded.rows,state.rows);
-assert.deepEqual(F.parse(F.serialize({view:state.view,rows:[]})).rows,[]);
+assert.equal(decoded.format,'orgchem-workspace');assert.equal(decoded.version,2);
+assert.deepEqual(decoded.view,state.view);assert.deepEqual(decoded.rows,state.rows);assert.deepEqual(decoded.bench,bench);
+const legacy = {format:'orgchem-workspace',version:1,view:state.view,rows:state.rows};
+assert.deepEqual(F.parse(JSON.stringify(legacy)),{...legacy,version:2,bench:history.empty()});
+assert.deepEqual(F.parse(F.serialize({view:state.view,rows:[]})),{...decoded,rows:[],bench:history.empty()});
+assert.throws(()=>F.parse(JSON.stringify({...legacy,bench}))); // No v2 fields in v1.
+assert.throws(()=>F.serialize({...state,bench:null}));
 const invalid = mutate => { const copy=structuredClone(decoded);mutate(copy);assert.throws(()=>F.parse(JSON.stringify(copy))); };
-for (const mutate of [x=>x.version=2,x=>x.format='bond-atlas/3',x=>x.view.mode='webgl',x=>x.view.benzene='invalid',
+for (const mutate of [x=>x.version=3,x=>delete x.bench,x=>x.bench=null,x=>x.bench.left='999',x=>x.bench.plates[0].history={},
+  x=>x.bench.plates[0].record={depiction:'<svg/>'},x=>x.format='bond-atlas/3',x=>x.view.mode='webgl',x=>x.view.benzene='invalid',
   x=>x.rows=null,x=>x.rows=Array.from({length:9},(_,i)=>({...x.rows[0],id:i+1})),x=>x.rows[1].id=7,
   x=>x.rows[0].id=0,x=>x.rows[0].id=1.5,x=>x.rows[0].id=F.maxId+1,x=>x.rows[0].visible='false',
   x=>x.rows[0].picked=1,x=>delete x.rows[0].picked,x=>x.rows[0].input=['C'],x=>x.rows[0].input='C'.repeat(F.maxChars+1),
   x=>x.rows[0].input='CC\nC',x=>x.rows[0].input='\ud800',x=>x.rows[0].record={depiction:'<svg/>'},x=>delete x.rows[1].input]) invalid(mutate);
 assert.throws(()=>F.parse('{'));assert.throws(()=>F.parse(' '.repeat(F.maxBytes+1)));
-assert.throws(()=>F.parse(JSON.stringify(decoded).replace('"version":1','"__proto__":{},"version":1')));
+assert.throws(()=>F.parse(JSON.stringify(decoded).replace('"version":2','"__proto__":{},"version":2')));
 const largest = {view:state.view,rows:Array.from({length:F.maxRows},(_,i)=>({id:i+1,input:'乙'.repeat(F.maxChars),visible:true,picked:false}))};
 assert.deepEqual(F.parse(F.serialize(largest)).rows,largest.rows);
-console.log('PASS workspace v1 round-trip, size limits, schema and row validation');
+console.log('PASS combined workspace round-trip, v1 migration, strict row and bench validation');
 const catalogs = {};
 for (const file of ['atlas-locales.js','atlas-shell-locales.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname,file),'utf8'), catalogs);
 for (const code of ['en','es','fr','zh-Hans','ar','de']) {
@@ -39,22 +45,25 @@ for (const code of ['en','es','fr','zh-Hans','ar','de']) {
   await assert.rejects(F.read({size:F.maxBytes,text:()=>exactLimit+' '}),/size/);
   assert.deepEqual(await F.read(new Blob([F.serialize(state)])),decoded);
 
-  const callbacks=new Map(),els=new Map(),installed=[];let download=null,saved=null,revoked=false;
+  const callbacks=new Map(),els=new Map(),installed=[];let download=null,downloadData,saved=null,downloadCount=0,revoked=false;
   function node(id){return {id,files:[],hidden:false,addEventListener:(type,fn)=>callbacks.set(id+':'+type,fn),click(){callbacks.get(id+':click')?.();}};}
   for(const id of ['download','open','save','input','status'])els.set('desk-file-'+id,node('desk-file-'+id));
-  const doc={getElementById:id=>els.get(id),body:{append(){}},createElement:()=>({click(){download=this.download;},remove(){}})};
-  const context={Blob,document:doc,isSecureContext:true,AtlasI18n:{t:key=>key,bindText:(el,key)=>el.textContent=key},
-    setTimeout:fn=>fn(),URL:{createObjectURL:()=> 'blob:test',revokeObjectURL:()=>{revoked=true;}},
+  const doc={getElementById:id=>els.get(id),body:{append(){}},createElement:()=>({click(){download=this.download;++downloadCount;},remove(){}})};
+  const context={Blob,PlateHistory:history,document:doc,isSecureContext:true,AtlasI18n:{t:key=>key,bindText:(el,key)=>el.textContent=key},
+    setTimeout:fn=>fn(),URL:{createObjectURL:b=>{downloadData=b;return 'blob:test';},revokeObjectURL:()=>{revoked=true;}},
     showSaveFilePicker:async opts=>{assert.equal(opts.suggestedName,F.filename);return {createWritable:async()=>({write:async b=>saved=await b.text(),close:async()=>{}})};}};
   context.window=context;vm.runInNewContext(fs.readFileSync(path.join(__dirname,'workspace-file.js'),'utf8'),context);
   let revision=0;
-  context.WorkspaceFile.attach(()=>state,doc=>installed.push(JSON.parse(JSON.stringify(doc))),()=>revision);
+  const apply=doc=>{installed.push(JSON.parse(JSON.stringify(doc)));revision++;};
+  let installer=apply;
+  const attach=()=>context.WorkspaceFile.attach(()=>state,(...args)=>installer(...args),()=>revision);
+  attach();assert.equal(els.get('desk-file-save').hidden,false);
   const click=id=>callbacks.get('desk-file-'+id+':click')(),status=()=>els.get('desk-file-status').textContent;
   const choose=async file=>{els.get('desk-file-input').files=[file];await callbacks.get('desk-file-input:change')();};
-  click('download');assert.equal(status(),'workspaceFile.downloaded');assert.equal(download,F.filename);assert(revoked);
+  click('download');assert.equal(status(),'workspaceFile.downloaded');assert.equal(download,F.filename);assert(revoked);assert.equal(await downloadData.text(),F.serialize(state));
   await click('save');assert.equal(status(),'workspaceFile.saved');assert.equal(saved,F.serialize(state));
   context.showSaveFilePicker=async()=>{throw Object.assign(Error(),{name:'AbortError'});};
-  await click('save');assert.equal(status(),'workspaceFile.cancelled');
+  await click('save');assert.equal(status(),'workspaceFile.cancelled');assert.equal(downloadCount,1,'cancel must not download');
   for(const failed of ['write','close']){
     let aborted=false;const fail=async()=>{throw Object.assign(Error(),{name:'AbortError'});};
     context.showSaveFilePicker=async()=>({createWritable:async()=>({write:async()=>{},close:async()=>{},[failed]:fail,abort:async()=>{aborted=true;}})});
@@ -69,7 +78,43 @@ for (const code of ['en','es','fr','zh-Hans','ar','de']) {
     supersede();finish(late);await old;
     assert.deepEqual(installed,[decoded]);assert.equal(status(),'workspaceFile.opened');
   }
-  console.log('PASS bounded reads, stale/invalid input ignored, downloads, native save/cancel/failure and open');
+  // Start an async installation and pause either side of the synchronous commit.
+  function deferred(){let resolve;const promise=new Promise(done=>resolve=done);return {promise,resolve};}
+  function staging({lateError=false,afterCommit=false}={}){
+    const reached=deferred(),resume=deferred();
+    installer=async(doc,current,commit)=>{
+      const applyIfCurrent=()=>commit(()=>apply(doc));
+      if (afterCommit) applyIfCurrent();
+      reached.resolve(current);await resume.promise;
+      if(lateError) throw Error('Could not prepare workspace');
+      if(!afterCommit) return applyIfCurrent();
+    };
+    return {ready:reached.promise,resume:resume.resolve,done:choose(new Blob([saved]))};
+  }
+  const cancelled=()=>callbacks.get('desk-file-input:cancel')();
+  for(const [supersede,lateError] of [[()=>revision++,false],[cancelled,false],[()=>click('open'),true],
+    [()=>choose(new Blob(['bad'])),false],[()=>choose(null),true]]){
+    const stage=staging({lateError}),current=await stage.ready;
+    assert(current());await supersede();assert(!current());
+    const lastStatus=status();stage.resume();await stage.done;
+    assert.deepEqual(installed,[decoded]);assert.equal(status(),lastStatus);
+  }
+  const complete=staging();await complete.ready;complete.resume();await complete.done;
+  assert.equal(status(),'workspaceFile.opened');assert.deepEqual(installed,[decoded,decoded]);
+  const later=staging({afterCommit:true});assert((await later.ready)());
+  await choose(new Blob(['bad']));later.resume();await later.done;
+  assert.equal(installed.length,3);assert.equal(status(),'workspaceFile.openError');
+  const failure=staging({lateError:true});await failure.ready;failure.resume();await failure.done;
+  assert.equal(installed.length,3);assert.equal(status(),'workspaceFile.openError');
+  // Even an otherwise valid desk must not be passed to install with a malformed bench.
+  await choose(new Blob([JSON.stringify({...decoded,bench:{}})]));assert.equal(installed.length,3);
+  installer=apply;await choose(new Blob([JSON.stringify(legacy)]));
+  assert.deepEqual(installed.at(-1),{...legacy,version:2,bench:history.empty()});
+  for (const config of [{isSecureContext:false},{isSecureContext:true,showSaveFilePicker:undefined}]){
+    Object.assign(context,config);attach();assert.equal(els.get('desk-file-save').hidden,true);
+    assert.equal(els.get('desk-file-download').hidden,false);click('download');assert.equal(status(),'workspaceFile.downloaded');
+  }
+  console.log('PASS bounded reads, atomic staging, stale/cancelled imports, explicit downloads and native save');
   if(process.argv.includes('--desk'))await deskChecks();
 })().catch(error=>{console.error(error);process.exitCode=1;});
 
@@ -125,6 +170,30 @@ async function deskChecks(){
     click('desk-undo');assert.equal(rows()[0],pendingRow);const restarted=await waitJob(1);
     first.resolve({record:w.ModelInput.preview('ethanol'),geometry:null,reason:'no-conformer'});await tick();assert.equal(pendingRow.querySelector('.row-formula').textContent,'');
     click('desk-redo');assert(restarted.signal.aborted);restarted.resolve({record:null,geometry:null,reason:'parse-failed'});await tick();assert.deepEqual(current(),restore);
-    console.log('PASS desk file restore, view/selection/history, ID collisions, rollback, pending row cancellation and intervening desk actions');
+    // Stock plates need no structure lookup. Import a nonempty bench and undo/redo the whole file.
+    const stockBench={...bench,plates:[{...bench.plates[0],smiles:'O',role:'reagent',stockId:'water',label:'Water'}]};
+    const rack=()=>JSON.parse(JSON.stringify(w.ReactionPlates.capture()));
+    const priorBench=rack(),priorDesk=current();
+    await startRead()(F.serialize({...original,bench:stockBench}));
+    assert.deepEqual(rack(),stockBench);assert.deepEqual(current(),original);
+    assert.equal(el('desk-file-status').textContent,w.AtlasI18n.t('workspaceFile.opened'));
+    click('desk-undo');assert.deepEqual(rack(),priorBench);assert.deepEqual(current(),priorDesk);
+    click('desk-redo');assert.deepEqual(rack(),stockBench);assert.deepEqual(current(),original);
+    // Validation and async structure preparation both run before either half is committed.
+    await startRead()(JSON.stringify({...decoded,bench:{...stockBench,right:'999'}}));
+    assert.deepEqual(rack(),stockBench);assert.deepEqual(current(),original);
+    w.ReactionInput.parse=async()=>{throw Error('Structure unavailable');};
+    await startRead()(F.serialize({...restore,bench}));assert.deepEqual(rack(),stockBench);assert.deepEqual(current(),original);
+    assert.equal(el('desk-file-status').textContent,w.AtlasI18n.t('workspaceFile.openError'));
+    let parseStarted=false,resumeParse;
+    w.ReactionInput.parse=()=>{parseStarted=true;return new Promise(resolve=>resumeParse=resolve);};
+    await startRead()(F.serialize({...restore,bench}));assert(parseStarted);
+    change('plate-condition','ambient');const editedBench=rack(),lastStatus=el('desk-file-status').textContent;
+    resumeParse(w.ModelInput.preview('ethanol'));await tick();
+    assert.deepEqual(rack(),editedBench);assert.deepEqual(current(),original);assert.equal(el('desk-file-status').textContent,lastStatus);
+    await startRead()(JSON.stringify(legacy));assert.deepEqual(rack(),history.empty());
+    assert.deepEqual(current(),{view:legacy.view,rows:legacy.rows});
+    click('desk-undo');assert.deepEqual(rack(),editedBench);assert.deepEqual(current(),original);
+    console.log('PASS desk restore, row cancellation, combined rack undo/redo, v1 migration and atomic failure');
   } finally {dom.window.close();}
 }

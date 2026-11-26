@@ -28,7 +28,11 @@ consoleEvents.on('jsdomError', e => errors.push(e.cause?.stack || e.message));
 const dom = new JSDOM(await getText('/'), {url: origin, runScripts: 'outside-only',
   pretendToBeVisual: true, virtualConsole: consoleEvents});
 const w = dom.window, doc = w.document;
-try {
+try { await runChecks(); } finally {
+  dom.window.close();
+}
+
+async function runChecks(){
   // No automatic subresources or inline handlers. Use only scripts from this checkout;
   // compare every script to the served page/asset before evaluating any of them.
   const trusted = JSDOM.fragment(await readFile(new URL('bond-atlas.html', root), 'utf8'));
@@ -68,6 +72,9 @@ try {
       await delay(50);
     }
   };
+  if(process.argv[3]==='--plate-files'){
+    el('show-reagents').click();await checkPlates({w,el,select,until},true);assert.deepEqual(errors,[]);return;
+  }
   assert.equal(el('show-models').getAttribute('aria-pressed'),'true');
   const rows=()=>[...doc.querySelectorAll('#desk-rows > li')];
   const type=(row,value)=>{const f=row.querySelector('input');f.value=value;f.dispatchEvent(new w.Event('input',{bubbles:true}));};
@@ -339,6 +346,4 @@ try {
     assert.deepEqual(errors,[]);
   } finally {app.state.renderFailed=oldRenderFailed;}
   console.log('PASS: Together prepares real conformers without replacing the collection or filter');
-} finally {
-  w.close();
 }

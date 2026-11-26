@@ -33,7 +33,8 @@ _TETRA = {_CT.CHI_TETRAHEDRAL_CW, _CT.CHI_TETRAHEDRAL_CCW}
 _DISPLAY_NAMES = {
     "O": "Water", "CCO": "Ethanol", "CO": "Methanol", "C": "Methane",
     "CC": "Ethane", "CCC": "Propane", "CCCC": "Butane", "CC(C)C": "2-Methylpropane",
-    "CC(=O)O": "Acetic acid", "CC(O)C(=O)O": "Lactic acid",
+    "CC=O": "Ethanal", "CC(=O)O": "Ethanoic acid (acetic acid)", "CC(O)C(=O)O": "Lactic acid",
+    "CC(=O)C": "Propanone", "CC(O)C": "Propan-2-ol", "C=CCC": "But-1-ene",
     "c1ccccc1": "Benzene", "CC=CC": "But-2-ene", "CC(O)C(C)O": "Butane-2,3-diol",
     "[NH4+]": "Ammonium", "[Na+].[Cl-]": "Sodium chloride",
 }
@@ -174,6 +175,9 @@ def _canonical(mol, stereo=True, *, keep_hydrogens=False):
 
 # Names are optional captions. Canonicalize these examples once, not on every miss.
 _NAME_BY_CONNECTIVITY = {_canonical(Chem.MolFromSmiles(s), False): name for s, name in _DISPLAY_NAMES.items()}
+# Never infer E/Z from the connectivity key: it is identical for both isomers.
+_NAME_BY_STEREO = {_canonical(Chem.MolFromSmiles(s)): name for s, name in
+                   (("C/C=C/C", "(E)-but-2-ene"), ("C/C=C\\C", "(Z)-but-2-ene"))}
 
 
 def _hash(prefix, text):
@@ -649,7 +653,7 @@ def _record(mol, conformers=None, warnings=None):
             not a.GetFormalCharge() and not a.GetNumRadicalElectrons()
             and valences.get(a.GetSymbol()) == a.GetTotalValence() for a in mol.GetAtoms())):
         dbe = (2 * counts.get("C", 0) + 2 + counts.get("N", 0) - counts.get("H", 0) - sum(counts.get(x, 0) for x in ("F", "Cl", "Br", "I"))) / 2
-    known = _NAME_BY_CONNECTIVITY.get(conn_notation)
+    known = _NAME_BY_STEREO.get(notation) or _NAME_BY_CONNECTIVITY.get(conn_notation)
     skeletal_svg, skeletal = _depiction(mol, False)
     displayed_svg, displayed = _depiction(mol, True)
     motif_atoms = {g["key"]: {identity for match in g["matches"] for identity in match}

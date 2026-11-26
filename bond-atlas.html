@@ -272,6 +272,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 <link rel="stylesheet" href="workbench.css">
 <link rel="stylesheet" href="reaction-plates.css">
 <link rel="stylesheet" href="plate-viewer.css">
+<link rel="stylesheet" href="plate-comparison.css">
 <link rel="stylesheet" href="atlas-fonts.css">
 <script src="atlas-locales.js"></script>
 <link rel="stylesheet" href="comparison.css">
@@ -304,7 +305,7 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
       <div class="desk-bulk"><label><input type="checkbox" id="desk-all"><span data-i18n="models.selectAll">Select all</span></label><button type="button" class="plain-button" id="desk-remove-picked" disabled></button></div>
       <ol id="desk-rows"></ol><button type="button" class="plain-button" id="desk-add" data-i18n="models.add">+ Add molecule</button>
       <details id="desk-files"><summary data-i18n="workspaceFile.title">Workspace files</summary>
-        <p class="input-note" id="desk-file-help" data-i18n="workspaceFile.help">Opening a file replaces these rows. You can undo it. Visible molecules may be processed by this site's chemistry service.</p>
+        <p class="input-note" id="desk-file-help" data-i18n="workspaceFile.help">Save as… lets you choose a local folder. Download uses your browser’s download settings. Opening replaces the models and plates and can be undone. Structures may be processed by this site’s chemistry service.</p>
         <div class="desk-tools"><button type="button" id="desk-file-download" data-i18n="workspaceFile.download">Download workspace</button><button type="button" id="desk-file-save" data-i18n="workspaceFile.save" hidden>Save as…</button><button type="button" id="desk-file-open" aria-describedby="desk-file-help" data-i18n="workspaceFile.open">Open workspace…</button></div>
         <input type="file" id="desk-file-input" accept=".json,application/json" aria-labelledby="desk-file-open" hidden><p class="input-note" role="status" id="desk-file-status"></p>
       </details>
@@ -327,7 +328,8 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
         <div id="plate-outcomes" hidden><label>Product pathway<select id="plate-branch"></select></label><p id="plate-explanation"></p><button type="button" class="action-button" id="plate-collect">Create product plate</button></div></section></div>
         <p id="plate-status" role="status">Add a worked pair, or prepare your own plates.</p>
         <section aria-labelledby="plate-rack-title"><h2 id="plate-rack-title">Your plates <small id="plate-count"></small></h2><p>Inspect a plate to see its structure. Product plates contain the selected isolated product, not the entire mixture. Parent plates stay available for comparison.</p><ol id="plate-rack"></ol></section><div id="plate-inspector" hidden><h3 id="plate-inspector-title" tabindex="-1"></h3><label>Component to inspect<select id="plate-component"></select></label><p id="plate-view-note"></p><div id="plate-view"></div><button type="button" class="plain-button" id="plate-close-view">Close inspection</button></div>
-        <p class="plate-note">These session-only plates model selected Cambridge AS &amp; A Level pathways. An unmatched pair means no rule is available, not necessarily no reaction. No quantities, rates or yields are predicted.</p>
+        <p class="plate-note"><button type="button" class="plain-button" id="plate-files">Save or open a workspace…</button> Save your plates and models together in a local file.</p>
+        <p class="plate-note">These plates model selected Cambridge AS &amp; A Level pathways. An unmatched pair means no rule is available, not necessarily no reaction. No quantities, rates or yields are predicted.</p>
       </div></details>
     <details id="rx-challenges" class="rx-challenges" hidden lang="en"><summary>Olympiad problems · hints and worked solutions</summary><div id="rx-problems"></div></details>
     <div class="rx-layout"><aside class="rx-inputs"><label for="rx-substrate" data-i18n="rx.substrate">Starting molecule</label><input id="rx-substrate" value="CCBr" maxlength="1024" spellcheck="false" autocomplete="off" dir="ltr" aria-describedby="rx-help">
@@ -1054,6 +1056,8 @@ dialog::backdrop { background:color-mix(in srgb,var(--ink) 40%,transparent); }
 <script src="reaction-library.js"></script>
 <script src="reaction-input.js"></script>
 <script src="plate-chemistry.js"></script>
+<script src="plate-history.js"></script>
+<script src="plate-comparison.js"></script>
 <script src="plate-viewer.js"></script>
 <script src="reaction-plates.js"></script>
 <script src="reaction-ui.js"></script>

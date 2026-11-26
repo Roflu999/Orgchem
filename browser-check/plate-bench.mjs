@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function checkPlates({w, el, select, until}) {
+export async function checkPlates({w, el, select, until}, filesOnly=false) {
   el('plate-lab').open = true;
   const cards = () => Array.from(el('plate-rack').children);
   const status = () => el('plate-status').textContent;
@@ -25,6 +25,39 @@ export async function checkPlates({w, el, select, until}) {
     const n=cards().length; el('plate-collect').click();
     await until(()=>cards().length===n+1 || !el('plate-collect').disabled,'collect a verified product');
     assert.equal(cards().length,n+1,status()); return cards().at(-1);
+  }
+  if(filesOnly){
+    // Collect two branches from the *same* parents, then reopen a real downloaded file.
+    await example(8);await collect();select('plate-condition','reflux');el('plate-preview').click();await collect();
+    const origin=w.ReactionPlates.capture();assert.equal(origin.plates.length,4);
+    for(const [index,condition] of [[2,'distil'],[3,'reflux']]){
+      const product=origin.plates[index];assert.equal(product.history.condition,condition);
+      assert.deepEqual([...product.history.parents.map(p=>p.id)],['1','2']);
+      cards()[index].querySelector('[aria-controls^="plate-comparison-"]').click();
+      await until(()=>cards()[index].querySelectorAll('img').length===2,'two 2D structures in the product card');
+      const comparison=cards()[index].querySelector('.plate-comparison');
+      const captions=[...comparison.querySelectorAll('figcaption')].map(el=>el.textContent);
+      assert.match(captions[0],/Starting moleculeEthanolC₂H₆O/);
+      assert.match(captions[1],condition==='distil'?/EthanalC₂H₄O/:/Ethanoic acid \(acetic acid\)C₂H₄O₂/);
+      const setup=comparison.querySelector('.plate-comparison-setup').textContent;
+      assert.match(setup,/acidified potassium dichromate/i);
+      assert.match(setup,condition==='distil'?/distillation/i:/reflux.*excess oxidant/i);
+      if(condition==='distil') assert.doesNotMatch(setup,/reflux|excess oxidant/i);
+    }
+    let blob;w.URL.createObjectURL=file=>{blob=file;return 'blob:local-test';};w.URL.revokeObjectURL=()=>{};
+    const prevent=e=>{if(e.target.closest('a[download]'))e.preventDefault();};
+    const choose=async parts=>{const picker=el('desk-file-input');Object.defineProperty(picker,'files',{configurable:true,value:[new w.File(parts,'bench.orgchem.json')]});picker.dispatchEvent(new w.Event('change'));};
+    el('plate-files').click();assert(el('desk-files').open);
+    w.document.addEventListener('click',prevent);el('desk-file-download').click();w.document.removeEventListener('click',prevent);assert(blob?.size>0);
+    const legacy={format:'orgchem-workspace',version:1,rows:[],view:{mode:'2d',benzene:'kekuleA'}};
+    await choose([JSON.stringify(legacy)]);await until(()=>!cards().length,'open a legacy model-only file');
+    await choose([blob]);await until(()=>cards().length===4,'reopen the local bench file');assert.deepEqual(w.ReactionPlates.capture(),origin);
+    el('desk-undo').click();assert.equal(cards().length,0);el('desk-redo').click();assert.deepEqual(w.ReactionPlates.capture(),origin);
+    el('show-reagents').click();cards()[0].querySelector('[aria-label^="Remove"]').click();
+    const orphan=cards().at(-1);assert.match(orphan.textContent,/P1 \+ P2/);orphan.querySelector('[aria-controls^="plate-comparison-"]').click();
+    await until(()=>orphan.querySelectorAll('img').length===2,'compare after removing the source plate');
+    console.log('PASS: two ethanol branches, retained sources, 2D comparisons, combined local file, legacy open and undo/redo');
+    return;
   }
   const parents=await example(0);cards()[0].querySelector('button').click();
   assert.match(el('plate-view').textContent,/Hydrogen deficiency: 1 DBE \(2 H atoms/i);el('plate-close-view').click();

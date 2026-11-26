@@ -108,7 +108,8 @@
   const currentView=()=>({mode,benzene:$('desk-benz').value});
   const snapshot=(withView=false)=>({view:withView?currentView():null,
     entries:rows.map(row=>({row,raw:row.raw,visible:row.visible,picked:row.pick.checked}))});
-  const captureFile=()=>({view:currentView(),rows:rows.map(row=>({id:row.id,input:row.raw,visible:row.visible,picked:row.pick.checked}))});
+  const captureRows=()=>({view:currentView(),rows:rows.map(row=>({id:row.id,input:row.raw,visible:row.visible,picked:row.pick.checked}))});
+  const captureFile=()=>({...captureRows(),bench:root.ReactionPlates.capture()});
   function historyControls(){
     $('desk-undo').disabled=!past.length;$('desk-redo').disabled=!future.length;
   }
@@ -129,7 +130,9 @@
     const from=redo?future:past,to=redo?past:future;
     if(!from.length)return;
     deskRevision++;
-    const target=from.pop(),list=$('desk-rows');to.push(snapshot(!!target.view));typing=null;
+    const target=from.pop(),list=$('desk-rows'),inverse=snapshot(!!target.view);
+    if(target.restoreBench){inverse.restoreBench=root.ReactionPlates.checkpoint();target.restoreBench();}
+    to.push(inverse);typing=null;
     const keep=new Set(target.entries.map(s=>s.row));
     for(const row of rows)if(!keep.has(row))detach(row);
     rows.splice(0,rows.length,...keep);
@@ -221,7 +224,7 @@
     $('desk-rows').insertBefore(row.el,rows[idx+1]?.el||null);schedule(row,350);update(row);draw();listControls();if(focus){row.field.focus();row.field.select();}
     return row;
   }
-  function installFile(state){
+  function installRows(state,installBench=null){
     if(!active)throw Error('Workspace no longer active');
     // Stage every row off-DOM before touching history, cancelling work, or rendering.
     const incoming=state.rows.map(r=>createRow(r.id,r.input,r.visible,r.picked));
@@ -231,8 +234,9 @@
       rows.splice(0,rows.length,...next);$('desk-rows').replaceChildren(...next.map(r=>r.el));
       $('desk-benz').value=view.benzene;lastDraw=null;setMode(view.mode);listControls();
     }
-    try{install(incoming,state.view);}
-    catch(error){install(before.entries.map(entry=>entry.row),before.view);throw error;}
+    if(installBench)before.restoreBench=root.ReactionPlates.checkpoint();
+    try{install(incoming,state.view);if(installBench)installBench();}
+    catch(error){before.restoreBench?.();install(before.entries.map(entry=>entry.row),before.view);throw error;}
     remember(before);
   }
   function setActive(on){
@@ -259,9 +263,23 @@
   I.bindAttr($('desk-add'),'title','models.limit',{max:maxRows});
   // A delayed read may replace only the desk it was requested for. Include
   // selection, grouped typing and view options that aren't history checkpoints.
-  files.attach(captureFile,installFile,()=>JSON.stringify([deskRevision,captureFile()]));
+  files.attach(captureFile,async (state,isCurrent,commit)=>{
+    const installBench=await root.ReactionPlates.prepare(state.bench,{isCurrent});
+    commit(()=>installRows(state,installBench));
+  },()=>JSON.stringify([deskRevision,captureRows()]));
+  document.addEventListener('plate-bench-change',()=>{
+    deskRevision++;
+    // An old file checkpoint must not discard plate edits made after that import.
+    for(const stack of [past,future]){
+      const i=stack.findLastIndex(s=>s.restoreBench);if(i!==-1)stack.splice(0,i+1);
+    }
+    historyControls();
+  });
+  $('plate-files').addEventListener('click',()=>{
+    root.BondAtlas.showView('models');$('desk-files').open=true;$('desk-files').querySelector('summary').focus();
+  });
   const compareSelection=root.ModelComparisons.controls(inputs=>{
-    installFile({view:{...currentView(),mode:'2d'},rows:inputs.map((input,i)=>({id:i+1,input,visible:true,picked:true}))});
+    installRows({view:{...currentView(),mode:'2d'},rows:inputs.map((input,i)=>({id:i+1,input,visible:true,picked:true}))});
   });
   root.BenzeneView.setup($('desk-benz'),()=>draw(true));
   root.ModelDesk={setActive,updateApply,suspendEditor:()=>closeEditor(true)};setActive(root.BondAtlas.state.labView==='models');

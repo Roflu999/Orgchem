@@ -10,7 +10,7 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
+def run_suite(files_only=False):
     # Pass a bound loopback socket to uvicorn rather than guessing an unused port.
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
@@ -28,6 +28,9 @@ def main():
                 time.sleep(.1)
         else:
             raise RuntimeError('Local chemistry server did not start')
+        if files_only:
+            subprocess.run(['node', 'browser-check/live-dom.mjs', str(port), '--plate-files'], cwd=ROOT, check=True, timeout=120)
+            return
         subprocess.run(['node', 'browser-check/live-dom.mjs', str(port)], cwd=ROOT, check=True, timeout=300)
         subprocess.run(['node', 'browser-check/plate-viewer.mjs', str(port)], cwd=ROOT, check=True, timeout=180)
     finally:
@@ -40,4 +43,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    run_suite(files_only=True)
+    run_suite()

@@ -1,4 +1,10 @@
-# v3.4.0: Reaction plates and molecular comparisons
+# v3.5.0: Follow a reaction
+
+- Compare a product plate with its starting molecule in 2D without changing the model workspace. Open **What changed?** for a supported transformation.
+- Each collected plate records its immediate parents, conditions, and selected pathway. Removing a parent does not erase the child's record.
+- Save the model workspace and reaction rack together in one local `.orgchem.json` file. **Save as…** lets you choose the folder where supported; **Download workspace** follows the browser's download settings. Older v3.4.0 files still open. Opening a workspace is undoable.
+
+## v3.4.0: Reaction plates and molecular comparisons
 
 - Combine two Cambridge International 9701 teaching plates and keep a selected product on a third. Ten worked pairs cover reductions, substitution, elimination and oxidation under distillation versus reflux. Parent plates remain available for a different pathway.
 - Explore 32 reaction lessons across AQA, Cambridge, Edexcel, IB and Olympiad reading lists, with five original Olympiad problems. Supported multisite substrates expose equivalent sites, distinct products and E/Z alternatives rather than predicting yields.

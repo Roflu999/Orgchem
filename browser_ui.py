@@ -152,6 +152,50 @@ def student_walkthrough(page, captures=None):
     print('PASS phone canvas, keyboard drawing tools, atom identity and localized sketch guide', flush=True)
 
 
+def plate_workspace(page):
+    """Follow two products from one pair; save, reload and reopen using local files."""
+    def key(selector):
+        page.locator(selector).press('Enter')
+
+    key('#show-reagents')
+    key('#plate-lab > summary')
+    page.locator('#plate-starter').select_option('8')
+    key('#plate-load')
+    cards = page.locator('#plate-rack > li')
+    expect(cards).to_have_count(2)
+    for i, condition in enumerate(('distil', 'reflux')):
+        page.locator('#plate-condition').select_option(condition)
+        key('#plate-preview')
+        key('#plate-collect')
+        expect(cards).to_have_count(i + 3)
+        card = cards.nth(i + 2)
+        card.get_by_role('button', name=re.compile('Compare with starting molecule')).press('Enter')
+        expect(card.locator('.plate-comparison img')).to_have_count(2)
+        card.locator('.plate-comparison summary').press('Enter')
+        expect(card.locator('.plate-comparison details p')).to_be_visible()
+        assert not semantics(page)['overflow']
+    key('#plate-files')
+    expect(page.locator('#desk-files > summary')).to_be_focused()
+    with page.expect_download() as event:
+        key('#desk-file-download')
+    download = event.value
+    data = download.path().read_bytes()
+    assert [p['history']['condition'] for p in json.loads(data)['bench']['plates'][2:]] == ['distil', 'reflux']
+    page.reload(wait_until='domcontentloaded')
+    expect(cards).to_have_count(0)
+    page.locator('#desk-file-input').set_input_files({'name':download.suggested_filename,'mimeType':'application/json','buffer':data})
+    expect(cards).to_have_count(4)
+    key('#show-reagents')
+    key('#plate-lab > summary')
+    for j in (2, 3):
+        card = cards.nth(j)
+        expect(card).to_contain_text('P1 + P2')
+        card.get_by_role('button', name=re.compile('Compare with starting molecule')).press('Enter')
+        expect(card.locator('.plate-comparison img')).to_have_count(2)
+    assert not semantics(page)['overflow']
+    print(f'PASS keyboard plate comparison and local file reload at {page.viewport_size["width"]}px', flush=True)
+
+
 def reaction_phone(page, captures=None):
     page.set_viewport_size({'width': 390, 'height': 844})
     preferences(page, text='large')
@@ -181,6 +225,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--url', default='http://127.0.0.1:8000')
     parser.add_argument('--reaction-phone', action='store_true', help='Run only the phone-width large molecule inspector check.')
+    parser.add_argument('--plate-workspace', action='store_true', help='Compare, save and reopen reaction plates at desktop and phone widths.')
     parser.add_argument('--browser-library-root')
     parser.add_argument('--disable-browser-sandbox', action='store_true')
     parser.add_argument('--screenshots', default='/tmp/bond-atlas-ui')
@@ -205,6 +250,13 @@ def main():
         page.on('request', lambda request: jobs.append(request.url) if request.method=='POST' and '/api/v1/jobs' in request.url else None)
         try:
             page.goto(args.url,wait_until='domcontentloaded',timeout=30000)
+            if args.plate_workspace:
+                for width in (1280, 390):
+                    page.set_viewport_size({'width':width,'height':844})
+                    page.goto(args.url, wait_until='domcontentloaded')
+                    plate_workspace(page)
+                assert not errors, errors
+                return
             if args.reaction_phone:
                 reaction_phone(page, out if args.capture else None)
                 assert not errors, errors

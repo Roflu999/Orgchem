@@ -37,7 +37,8 @@ class APITests(unittest.TestCase):
         for asset in ('comparison-mirrors.js', 'model-comparisons.js', 'comparison-locales.js',
                       'comparison.css', 'workspace-file.js', 'reaction-sites.js', 'reaction-extension.js',
                       'reaction-guide.js', 'reaction-learning-ui.js', 'reaction-input.js', 'reaction-plates.js',
-                      'plate-chemistry.js', 'plate-viewer.js', 'plate-viewer.css', 'reaction-plates.css'):
+                      'plate-chemistry.js', 'plate-viewer.js', 'plate-viewer.css', 'reaction-plates.css',
+                      'plate-history.js', 'plate-comparison.js', 'plate-comparison.css'):
             self.assertIn('"' + asset + '"', response.text)
             self.assertEqual(self.client.get('/' + asset).status_code, 200, asset)
         for path in ['/requirements.txt','/backend/chemistry_service.py','/.venv/pyvenv.cfg','/../README.md']:

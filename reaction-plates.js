@@ -4,7 +4,26 @@
   const $ = id => document.getElementById('plate-'+id);
   const {stock, conditions, run} = root.PlateChemistry;
   const stocks = new Map(stock.map(s => [s.id,s]));
-  const rack = new Map(), stockRecords = new Map(), limit = 48;
+  const {limit,maxSerial} = root.PlateHistory;
+  const rack = new Map(), stockRecords = new Map();
+  const conditionNames = new Map(conditions.map(c => [c.id,c.label]));
+  const changed = () => document.dispatchEvent(new Event('plate-bench-change'));
+  let openComparison;
+  // These describe supported rule families, not an inferred atom mapping.
+  const explanations = new Map(Object.entries({
+    'carbonyl-hydride':'At the selected carbonyl, C=O becomes C–OH: an aldehyde or ketone becomes an alcohol.',
+    'alkene-hydrogenation':'The selected C=C becomes C–C as hydrogen adds across the double bond.',
+    'nitrile-hydrogenation':'The nitrile carbon is retained: R–C≡N becomes R–CH₂NH₂.',
+    'aldehyde-oxidation':'The aldehyde group becomes a carboxylic acid group.',
+    'oxidation-ketone':'The secondary alcohol becomes a ketone. The carbon bearing OH now has a double bond to oxygen.',
+    'oxidation-acid':'The primary alcohol oxidises through an aldehyde to a carboxylic acid. Reflux keeps the aldehyde in the mixture; excess oxidant drives the further oxidation.',
+    'oxidation-aldehyde':'The primary alcohol group becomes an aldehyde group under distillation.',
+    'hydroxide-sn2':'OH replaces the halogen on the selected carbon, forming an alcohol.',
+    'haloalkane-elimination':'The halogen and a hydrogen on a neighbouring carbon are removed; a C=C forms between the two carbons.',
+    'acyl-water':'The acyl chloride becomes a carboxylic acid: OH replaces Cl at the acyl carbon.',
+    'acyl-ethanol':'An ethoxy group replaces Cl at the acyl carbon, forming an ethyl ester.',
+    'radical-chlorination':'In the modelled first substitution, chlorine replaces one hydrogen on the alkane.'
+  }));
   let serial = 0, pending, inspecting, inspection, viewer, outcome, active = false;
   const starters = [
     ['Reduce propanone to an alcohol','propanone','CC(=O)C','nabh4','water','ambient'],
@@ -30,8 +49,8 @@
   function clearOutcome() { outcome=null; $('outcomes').hidden=true; $('branch').replaceChildren(); $('explanation').textContent=''; }
   function cancel() { if(pending) { pending.abort(); pending=null; status('Setup changed. No plate was added.'); } controls(); }
   function controls() {
-    $('load').disabled=!!pending || rack.size+2>limit;
-    $('create').disabled=$('collect').disabled=!!pending || rack.size>=limit;
+    $('load').disabled=!!pending || rack.size+2>limit || serial+2>maxSerial;
+    $('create').disabled=$('collect').disabled=!!pending || rack.size>=limit || serial>=maxSerial;
     $('preview').disabled=!!pending || rack.size<2 || $('left').value===$('right').value;
   }
   async function work(message, prepare, commit) {
@@ -41,7 +60,43 @@
     catch(error) { if(!task.signal.aborted) status(error.message || 'Could not prepare this structure.'); }
     finally { if(pending===task) pending=null; controls(); }
   }
-  function add(p) { p.id=String(++serial); rack.set(p.id,p); return p; }
+  function add(p) {
+    p.id=String(++serial);
+    p.smiles=stocks.get(p.stockId)?.smiles || p.smiles || p.record.notation;
+    rack.set(p.id,p); return p;
+  }
+  const snapshot = p => ({id:p.id,role:p.role,label:p.label,smiles:p.smiles,stockId:p.stockId || '',medium:p.medium || '',catalyst:p.catalyst || ''});
+  const currentSetup = () => ({serial,left:$('left').value,right:$('right').value,condition:$('condition').value});
+  function capture() {
+    return root.PlateHistory.validate({...currentSetup(),plates:Array.from(rack.values(),p=>({...snapshot(p),history:p.history || null}))});
+  }
+  // Neither a saved workspace nor an undo checkpoint contains a pending task.
+  function commitBench(plates,setup) {
+    cancel(); resetInspection(); clearOutcome(); rack.clear();
+    for(const p of plates) rack.set(p.id,p);
+    serial=setup.serial;
+    $('condition').value=setup.condition; render(setup.left,setup.right);
+    $('left').value=setup.left; $('right').value=setup.right; controls();
+    status(plates.length?`Restored ${plates.length} plate${plates.length===1?'':'s'}.`:'The plate rack is empty.');
+  }
+  function checkpoint() {
+    const plates=Array.from(rack.values()), setup=currentSetup();
+    return () => commitBench(plates,setup);
+  }
+  async function prepare(savedBench,{isCurrent=()=>true,signal}={}) {
+    const bench=root.PlateHistory.validate(savedBench), records=new Map();
+    const check=()=>{ if(signal?.aborted || !isCurrent()) throw new DOMException('Plate restore cancelled','AbortError'); };
+    check();
+    // Parse once per distinct non-stock structure, including deleted parents.
+    // Sequential lookups avoid flooding the service; nothing touches the rack yet.
+    for(const p of bench.plates) for(const s of [p,...(p.history?.parents || [])]) {
+      if(s.stockId || records.has(s.smiles)) continue;
+      const record=await root.ReactionInput.parse('smiles:'+s.smiles,{signal}); check();
+      records.set(s.smiles,record);
+    }
+    const plates=bench.plates.map(p=>({...p,record:p.stockId?null:records.get(p.smiles)}));
+    return () => commitBench(plates,bench);
+  }
   function resetInspection() {
     inspection?.abort(); inspection=null; inspecting=null; viewer?.clear(); $('view-note').textContent=''; $('inspector').hidden=true;
   }
@@ -68,18 +123,55 @@
     $('component').replaceChildren(...components(p).map((c,i)=>option(String(i),`${c.label} · ${c.role}`)));
     inspectComponent(); $('inspector-title').focus();
   }
+  function closeComparison() {
+    if(!openComparison) return;
+    const {host,toggle}=openComparison; openComparison=null;
+    root.PlateComparison.clear(host); toggle.setAttribute('aria-expanded','false');
+  }
+  function addHistory(li,p) {
+    const h=p.history, ids=h.parents.map(s=>'P'+s.id).join(' + ');
+    li.append(element('p',`From ${ids} · ${h.label} · ${conditionNames.get(h.condition)}`));
+    const more=document.createElement('details'); more.append(element('summary','Plate history'));
+    for(const s of h.parents) {
+      const contents=[s.role,s.medium && stocks.get(s.medium).label+' medium',s.catalyst && stocks.get(s.catalyst).label+' catalyst'].filter(Boolean);
+      more.append(element('p',title(s)+' · '+contents.join(' · ')),element('code',s.smiles));
+    }
+    more.append(element('p',`Selected pathway ${h.branch.index+1}: ${h.branch.label}`));
+    if(h.branch.sites) more.append(element('p',h.branch.sites));
+    li.append(more);
+  }
+  function addComparison(li,p) {
+    const before=p.history.parents.find(s=>s.role==='substrate'),host=document.createElement('div');
+    host.id='plate-comparison-'+p.id;
+    const toggle=button('Compare with starting molecule',()=>{
+      const closing=openComparison?.host===host; closeComparison();
+      if(closing) return;
+      openComparison={host,toggle}; toggle.setAttribute('aria-expanded','true');
+      const h=p.history, reagent=h.parents.find(s=>s.role==='reagent');
+      const medium=reagent.medium || before.medium;
+      const setup=[reagent.label, medium && stocks.get(medium).label+' medium',
+        reagent.catalyst && stocks.get(reagent.catalyst).label+' catalyst', conditionNames.get(h.condition)];
+      if(['oxidation-acid','aldehyde-oxidation'].includes(h.pathway)) setup.push('excess oxidant');
+      root.PlateComparison.show(host,{label:before.label,smiles:before.smiles},{label:p.label,smiles:p.smiles},
+        explanations.get(h.pathway),setup.filter(Boolean).join(' · '));
+    });
+    toggle.setAttribute('aria-label','Compare with starting molecule for '+title(p));toggle.setAttribute('aria-controls',host.id);
+    toggle.setAttribute('aria-expanded','false'); li.append(toggle,host);
+  }
   function render(left=$('left').value, right=$('right').value) {
+    closeComparison();
     const plates=Array.from(rack.values()); $('count').textContent=`${plates.length} / ${limit}`;
     const cards=plates.map(p=>{
       const li=document.createElement('li'); li.dataset.plate=p.id;
       li.append(element('strong',title(p)),element('p',[p.role, p.medium?stocks.get(p.medium).label+' medium':'no added solvent',p.catalyst?stocks.get(p.catalyst).label+' catalyst':null].filter(Boolean).join(' · ')));
-      if(p.origin && p.origin.length<=120) li.append(element('p',p.origin));
-      if(p.record?.notation?.length>48 || p.origin?.length>120){
-        const more=document.createElement('details');more.append(element('summary','Structure details'));
-        if(p.record?.notation)more.append(element('code',p.record.notation));if(p.origin?.length>120)more.append(element('p',p.origin));li.append(more);
+      if(p.history) addHistory(li,p);
+      if(p.smiles.length>48){
+        const more=document.createElement('details');more.append(element('summary','Structure details'),element('code',p.smiles));li.append(more);
       }
-      const view=button('Inspect',()=>inspect(p)),remove=button('Remove',()=>{cancel(); clearOutcome(); if(inspecting===p) resetInspection(); rack.delete(p.id); render(); status(`Removed P${p.id}. Other plates are unchanged.`); $('stock').focus();});
-      view.setAttribute('aria-label','Inspect '+title(p));remove.setAttribute('aria-label','Remove '+title(p));li.append(view,remove);return li;
+      const view=button('Inspect',()=>inspect(p)),remove=button('Remove',()=>{cancel(); clearOutcome(); if(inspecting===p) resetInspection(); rack.delete(p.id); render(); changed(); status(`Removed P${p.id}. Other plates are unchanged.`); $('stock').focus();});
+      view.setAttribute('aria-label','Inspect '+title(p));remove.setAttribute('aria-label','Remove '+title(p));li.append(view,remove);
+      if(p.history && p.history.pathway!=='reagent-preparation') addComparison(li,p);
+      return li;
     });
     $('rack').replaceChildren(...cards);
     for(const id of ['left','right']) $(id).replaceChildren(...plates.map(p=>option(p.id,title(p))));
@@ -103,7 +195,7 @@
     const [,label,smiles,stockId,medium,condition,catalyst]=starters[Number($('starter').value)];
     work('Preparing the example pair…',signal=>root.ReactionInput.parse('smiles:'+smiles,{signal}),record=>{
       const a=add({label,role:'substrate',record}), b=add({label:stocks.get(stockId).label,role:'reagent',stockId,medium,catalyst});
-      clearOutcome(); render(a.id,b.id); $('condition').value=condition; status(`Prepared P${a.id} and P${b.id}. Check pathways to compare outcomes.`);
+      clearOutcome(); render(a.id,b.id); $('condition').value=condition; changed(); status(`Prepared P${a.id} and P${b.id}. Check pathways to compare outcomes.`);
     });
   });
   $('stock').addEventListener('change',updateRoles); $('role').addEventListener('change',updateCatalyst);
@@ -118,11 +210,11 @@
       const known=item || stocks.get(root.PlateChemistry.stockIdentity(record));
       if(known&&!known.roles.includes(role)) {status(`${known.label} is not a ${role} in the supported pathways.`);return;}
       const p=add({role,medium,catalyst,record,stockId:known?.id,label:known?.label || labelFor(record,raw)});
-      clearOutcome(); render(rack.size===1?p.id:$('left').value,p.id); status(`Created ${title(p)}.`);
+      clearOutcome(); render(rack.size===1?p.id:$('left').value,p.id); changed(); status(`Created ${title(p)}.`);
     });
   });
   for(const id of ['left','right','condition']) $(id).addEventListener('change',()=>{
-    cancel(); clearOutcome(); controls(); status($('left').value===$('right').value?'Choose two different plates.':'Setup changed. Check pathways again.');
+    cancel(); clearOutcome(); controls(); changed(); status($('left').value===$('right').value?'Choose two different plates.':'Setup changed. Check pathways again.');
   });
   $('preview').addEventListener('click',()=>{
     clearOutcome(); const a=rack.get($('left').value), b=rack.get($('right').value); if(!a||!b||a===b) return;
@@ -164,16 +256,17 @@
   $('branch').addEventListener('change',()=>{cancel(); describe();});
   $('collect').addEventListener('click',()=>{
     if(!outcome||rack.size>=limit) return;
-    const v=outcome.alternatives[Number($('branch').value)], left=$('left').value,right=$('right').value;
-    const origin=`From P${left} + P${right} · ${outcome.label} · ${$('condition').selectedOptions[0].textContent} · ${v.label}`;
-    if(v.prepared){const p=add({...v.prepared,origin});render(left,right);status(`Created prepared plate P${p.id}. Choose it alongside a substrate.`);return;}
+    const index=Number($('branch').value), v=outcome.alternatives[index], left=$('left').value,right=$('right').value;
+    const history={parents:[left,right].map(id=>snapshot(rack.get(id))),pathway:v.prepared?'reagent-preparation':outcome.ruleId,
+      label:outcome.label,condition:$('condition').value,branch:{index,label:v.label,sites:v.sites || ''}};
+    if(v.prepared){const p=add({...v.prepared,history});render(left,right);changed();status(`Created prepared plate P${p.id}. Choose it alongside a substrate.`);return;}
     work('Checking the selected product…',signal=>root.ReactionInput.parse('smiles:'+v.productSmiles,{signal}),record=>{
-      const p=add({role:'substrate',record,label:labelFor(record,v.productSmiles),origin});
-      render(left,right); status(`Created ${title(p)}. Its parents are unchanged. Select it as a substrate for a later reaction.`);
+      const p=add({role:'substrate',record,smiles:v.productSmiles,label:labelFor(record,v.productSmiles),history});
+      render(left,right); changed(); status(`Created ${title(p)}. Its parents are unchanged. Select it as a substrate for a later reaction.`);
     });
   });
   $('component').addEventListener('change',inspectComponent); $('close-view').addEventListener('click',()=>{const id=inspecting?.id;resetInspection(); $('rack').querySelector(`[data-plate="${id}"] button`)?.focus();});
-  function suspend() { cancel(); resetInspection(); }
+  function suspend() { cancel(); resetInspection(); closeComparison(); }
   $('lab').addEventListener('toggle',()=>{if(!$('lab').open) suspend();});
-  root.ReactionPlates={setActive(on) { active=on; if(!on) suspend(); }};
+  root.ReactionPlates={capture,prepare,checkpoint,setActive(on) { active=on; if(!on) suspend(); }};
 })(window);

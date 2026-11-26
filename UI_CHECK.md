@@ -9,7 +9,7 @@
 | Jump to another region | **Focus on** in the inspector selects an atom directly rather than requiring repeated zoom and pan. **Fit** returns to the whole molecule. The atom menu works without a pointer. | A learner who does not know the atom number should start with the selected reaction site. A 3D model requires a verified conformer; the 2D view remains usable without one. |
 | Compare heating setups | Two worked pairs start with ethanol and aqueous acidified dichromate(VI). Distillation removes ethanal; reflux keeps it in contact with excess oxidant to form ethanoic acid. Plain **Heat** asks for a setup instead of guessing. | These are textbook outcomes, not temperature, yield or apparatus simulations. |
 | Read hydrogen deficiency | The formula and DBE appear together, including the number of missing hydrogen atoms relative to the saturated open chain. An inapplicable calculation is distinguished from zero. | One DBE can indicate a ring or a double bond; the formula alone cannot distinguish them. |
-| Compare or reuse plates | Every plate has a stable `P` number; a child records both parents. Long structural strings are disclosed instead of filling rack headings. Inspect and Remove carry plate-specific accessible names. | Plates are session-only. A model workspace export does not save the plate rack. |
+| Compare or reuse plates | Every plate has a stable `P` number; a child records both parents. Long structural strings are disclosed instead of filling rack headings. Inspect and Remove carry plate-specific accessible names. | Save a workspace file to keep the rack between sessions. Each product retains its immediate parents; its comparison is not an atom-by-atom mapping. |
 
 ## Evidence from this build
 
