@@ -40,9 +40,15 @@
   }
   function attach(capture, install, getOpenContext = () => null) {
     const doc = root.document, el = suffix => doc.getElementById('desk-file-' + suffix);
-    const status = key => root.AtlasI18n.bindText(el('status'), 'workspaceFile.' + key);
+    // Save and open run independently but share one status line.
+    let latestAction = 0;
+    function beginAction() {
+      const id = ++latestAction;
+      return key => { if (id === latestAction) root.AtlasI18n.bindText(el('status'), 'workspaceFile.' + key); };
+    }
     const blob = () => new Blob([serialize(capture())], {type:'application/json'});
     el('download').addEventListener('click', () => {
+      const status = beginAction();
       try {
         const url = root.URL.createObjectURL(blob()), link = doc.createElement('a');
         try { link.href = url; link.download = filename; doc.body.append(link); link.click(); }
@@ -53,6 +59,9 @@
     const save = el('save');
     save.hidden = typeof root.showSaveFilePicker !== 'function' || root.isSecureContext !== true;
     save.addEventListener('click', async () => {
+      if (save.disabled) return;
+      save.disabled = true;
+      const status = beginAction();
       let writer, picking = false;
       try {
         const data = blob();
@@ -64,7 +73,7 @@
       } catch (error) {
         if (writer) { try { await writer.abort(); } catch { /* May already be closed. */ } }
         status(picking && error?.name === 'AbortError' ? 'cancelled' : 'saveError');
-      }
+      } finally { save.disabled = false; }
     });
     const picker = el('input'); let readId = 0;
     el('open').addEventListener('click', () => { ++readId; picker.click(); });
@@ -73,6 +82,7 @@
       const id = ++readId;
       const file = picker.files[0]; picker.value = '';
       if (!file) return;
+      const status = beginAction();
       let context = getOpenContext();
       const current = () => id === readId && getOpenContext() === context;
       // Async installers stage without mutation and apply both parts synchronously here.

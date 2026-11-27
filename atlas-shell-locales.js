@@ -165,7 +165,7 @@
     'shell.stereo':['Stereo & conformers','Estéreo y confórmeros','Stéréo et conformères','立体异构与构象','التماكب الفراغي والمتوافقات','Stereo & Konformere'],
     'shell.build':["2D simulator","Simulador 2D","Simulateur 2D","二维模拟器","محاكي ثنائي الأبعاد","2D-Simulator"],
     'shell.focusViewer':['Go to molecule','Ir a la molécula','Aller à la molécule','转到分子视图','الانتقال إلى الجزيء','Zum Molekül'],
-    'shell.about':['Help & scope','Ayuda y alcance','Aide et limites','帮助与适用范围','المساعدة والنطاق','Hilfe & Umfang'],
+    'shell.about':['Tutorial & wiki','Tutorial y wiki (inglés)','Tutoriel et wiki (anglais)','教程与维基（英语）','البرنامج التعليمي والويكي (بالإنجليزية)','Tutorial & Wiki (Englisch)'],
     'shell.language':['Language','Idioma','Langue','界面语言','اللغة','Sprache'],
     'shell.preferences':['Display & accessibility','Pantalla y accesibilidad','Affichage et accessibilité','显示与无障碍','العرض وإمكانية الوصول','Anzeige & Barrierefreiheit'],
     'shell.skip':['Skip to workspace','Saltar al espacio de trabajo','Aller à l’espace de travail','跳到工作区','الانتقال إلى مساحة العمل','Zum Arbeitsbereich springen'],

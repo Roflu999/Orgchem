@@ -69,6 +69,14 @@ for (const code of ['en','es','fr','zh-Hans','ar','de']) {
     context.showSaveFilePicker=async()=>({createWritable:async()=>({write:async()=>{},close:async()=>{},[failed]:fail,abort:async()=>{aborted=true;}})});
     await click('save');assert(aborted);assert.equal(status(),'workspaceFile.saveError');
   }
+  // A slow disk write must not overlap a second save or mask a later open failure.
+  const writing=deferred(),close=deferred();let pickCount=0;
+  context.showSaveFilePicker=async()=>{pickCount++;return {createWritable:async()=>({write:async()=>{},close:()=>{writing.resolve();return close.promise;}})};};
+  const slowSave=click('save');await writing.promise;
+  const duplicateSave=click('save');await choose(new Blob(['bad']));close.resolve();await Promise.all([slowSave,duplicateSave]);
+  assert.equal(pickCount,1,'only one save can own the writer at a time');
+  assert.equal(status(),'workspaceFile.openError','late save masked the newer file error');
+  assert.equal(els.get('desk-file-save').disabled,false);
   let finish;const stale=choose({size:12,text:()=>new Promise(resolve=>finish=resolve)});
   await choose(new Blob(['invalid']));finish(F.serialize(state));await stale;
   assert.equal(installed.length,0);assert.equal(status(),'workspaceFile.openError');
@@ -138,6 +146,13 @@ async function deskChecks(){
     const restore={view:{mode:'3d',benzene:'cloud'},rows:[{id:F.maxId,input:' benzene ',visible:false,picked:true},{id:1,input:'',visible:true,picked:false}]};
     const fileText=F.serialize(restore);
     function startRead(){let finish;choose({size:fileText.length,text:()=>new Promise(resolve=>finish=resolve)});return async(text=fileText)=>{finish(text);await tick();};}
+    // A tab copied with a name (e.g. from a spreadsheet) must not strand an
+    // otherwise usable model and its entire plate rack in an unsavable desk.
+    const pasted=field(rows()[0]);pasted.value='\tethanol\t';pasted.setSelectionRange(2,5);
+    pasted.dispatchEvent(new w.Event('input',{bubbles:true}));
+    assert.equal(pasted.value,' ethanol ');assert.deepEqual([pasted.selectionStart,pasted.selectionEnd],[2,5]);
+    assert(rows()[0].querySelector('.row-formula').textContent);
+    assert.deepEqual(F.parse(F.serialize({...current(),bench})).rows,current().rows);
     click('desk-starter-chain');const original=current(), initialRows=rows();
     await startRead()();assert.deepEqual(current(),restore);assert(el('desk-all').indeterminate);
     click('desk-undo');assert.deepEqual(rows(),initialRows);assert.deepEqual(current(),original);

@@ -1,6 +1,6 @@
 # Orgchem Visualizer
 
-Organic Chemistry visualizer
+**New here?** Open **Tutorial & wiki** at the top of any workspace. The five-step tutorial starts with an editable pair of molecules. Close the guide to try a step, reopen it to continue, or choose **Start first-time tutorial** to replay it. **Browse the wiki** lists tasks, their walkthroughs, and the release that introduced them. Both guides are in English, work locally, and leave your workspace unchanged.
 
 A textbook-style chemistry website: **structure → possible stereoisomers → conformers → linked representations**. The interface is vanilla JavaScript with 3Dmol.js; authoritative chemical parsing, stereochemistry and conformer calculations run in RDKit behind a same-origin FastAPI service.
 

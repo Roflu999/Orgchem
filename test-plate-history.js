@@ -153,7 +153,14 @@ async function domChecks(){
     assert.match(details.textContent,/Reagent preparation: P1 · Hydrogen \+ P2 · Nickel/);
     assert.match(details.textContent,/Nickel catalyst|catalyst: Nickel/);
     assert.deepEqual(capture(),unopened);assert.equal(changes,edits);
-    api.setActive(false);assert(!panel.open);
+    select('left','1');select('right','1');action(cards()[3],'Remove').click();
+    assert.equal(el('right').value,'1');assert(el('preview').disabled,'Unrelated removal must not change a same-plate setup');
+    select('left','1');select('right','2');action(cards()[0],'Remove').click();
+    assert.equal(el('right').value,'2','Removing the first plate preserves the second');assert.notEqual(el('left').value,'2');
+    select('stock','water');select('medium','ethanol');select('role','solvent');
+    assert(el('medium').disabled);assert.equal(el('medium').value,'');click('create');await tick();
+    assert.equal(capture().plates.at(-1).role,'solvent');
+    api.setActive(false);
     console.log('PASS plate DOM: branches, reagent preparation in route details, comparison after removal, staged restore, cancellation and undo');
   } finally {w.close();}
 }

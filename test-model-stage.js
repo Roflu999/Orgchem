@@ -114,6 +114,14 @@ function fitAndScale(f,rows) {
   assert.equal(f.count,0);assert.equal(images.length,2);assert.match(decodeURIComponent(images[0].src),/OH<\/text>/);
   assert.equal(decodeURIComponent(images[1].src.split(',')[1]),svg);assert.equal(images[1].alt,'assigned');
   f.stage.zoom(1.5);assert.equal(grid.style.transform,'scale(1.5)');f.stage.fit();assert.equal(grid.style.transform,'');
+  // A context can be created successfully but fail while drawing its first frame.
+  const create=f.win.$3Dmol.createViewer;
+  f.win.$3Dmol.createViewer=(...args)=>{const v=create(...args);v.render=()=>{throw Error('render failed');};return v;};
+  f.stage.zoom(1.5);
+  assert.throws(()=>f.stage.draw3D([small]),/render failed/);
+  assert.equal(grid.children.length,2,'failed 3D frame erased the last 2D drawings');
+  assert.equal(grid.style.display,'grid');assert.equal(grid.style.transform,'scale(1.5)');
+  f.viewer.lost=true;
   f.win.$3Dmol.createViewer=()=>{throw Error('context creation failed');};
   f.dims.width=0;assert.throws(()=>f.stage.draw3D([small]),/WebGL.*context creation failed/);assert.equal(grid.children.length,2);
   f.stage.destroy();

@@ -124,6 +124,25 @@ class LauncherTests(unittest.TestCase):
         install.assert_called_once_with(python, self.root)
         self.assertIsNotNone(json.loads((self.environment / launcher.MARKER).read_text(encoding="utf-8"))["requirements_sha256"])
 
+    def test_interrupted_marker_update_leaves_pending_install_retryable(self):
+        self.make_environment(managed=True)
+        original_files = set(self.environment.iterdir())
+        marker = self.environment / launcher.MARKER
+        original_marker = marker.read_bytes()
+
+        def short_write(state, handle):
+            handle.write('{')
+            raise OSError('short write')
+
+        with patch.object(launcher, 'probe', return_value=0), patch.object(launcher, 'install_runtime'):
+            with patch.object(launcher.json, 'dump', side_effect=short_write), self.assertRaises(OSError):
+                launcher.prepare_environment(self.root, self.environment)
+            self.assertEqual(marker.read_bytes(), original_marker)
+            self.assertEqual(set(self.environment.iterdir()), original_files)
+            launcher.prepare_environment(self.root, self.environment)
+        self.assertEqual(json.loads(marker.read_text(encoding='utf-8'))['requirements_sha256'],
+                         hashlib.sha256(self.requirements.read_bytes()).hexdigest())
+
     def test_changed_requirements_need_explicit_update(self):
         self.make_environment(managed=True, digest="0" * 64)
         with patch.object(launcher, "probe", return_value=0), patch.object(launcher, "install_runtime") as install:

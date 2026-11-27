@@ -55,6 +55,7 @@ jobs:
           npm --prefix browser-check ci --ignore-scripts --no-audit --no-fund
           node browser-check/row-compare.mjs
           node browser-check/import-interactions.mjs
+          node test-help-guide.js --dom
           node test-plate-history.js --bench
           node test-workspace-file.js --desk
           node test-model-input.js --rdkit

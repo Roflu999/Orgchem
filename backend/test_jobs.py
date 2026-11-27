@@ -293,6 +293,42 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
             watchdog.close()
             await manager.close()
 
+    async def test_cancel_waits_for_killed_process_before_reusing_slot(self):
+        gate = threading.Event()
+        manager = JobManager(workers=1, capacity=2, timeout=5)
+        context = manager.context = _ControlledContext(gate=gate)
+        killed = threading.Event()
+        reaped = threading.Event()
+        try:
+            job = manager.submit('parse', {'text': 'CCO'})
+            await self.wait_event(context.entered)
+            process = context.processes[0]
+
+            # Termination is asynchronous. Even a forced exit need not finish
+            # within the grace period allowed for a cooperative terminate().
+            def join(timeout=None):
+                if killed.is_set() and timeout is None:
+                    if not reaped.wait(3):
+                        raise AssertionError('Test did not release the killed process')
+                    process.alive = False
+
+            with patch.object(process, 'terminate'), patch.object(process, 'kill', killed.set), \
+                    patch.object(process, 'join', join):
+                manager.cancel(job.id)
+                following = manager.submit('parse', {'text': 'CC'})
+                gate.set()
+                await self.wait_event(killed)
+                self.assertFalse(job.task.done())
+                self.assertEqual(following.status, 'queued')
+                reaped.set()
+                await asyncio.wait_for(asyncio.gather(job.task, following.task), 3)
+            self.assertTrue(process.closed)
+            self.assertEqual(following.status, 'complete', following.error)
+        finally:
+            gate.set()
+            reaped.set()
+            await manager.close()
+
     async def test_failed_process_start_closes_unstarted_process_and_pipes(self):
         manager = JobManager(workers=1, timeout=3)
         context = manager.context = _ControlledContext(failure='controlled startup failure')

@@ -158,7 +158,9 @@ class JobManager:
             process.join(.4)
             if process.is_alive():
                 process.kill()
-                process.join(.4)
+                # kill() only requests exit. Keep the slot until the OS reaps
+                # this child; Process.close() rejects a still-running child.
+                process.join()
         process.close()
 
     async def _finish_process(self, job, startup, receive, receiver, sender):

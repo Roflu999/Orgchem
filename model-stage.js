@@ -285,9 +285,20 @@
     const observer = win.ResizeObserver ? new win.ResizeObserver(resize) : null;
     if (observer) observer.observe(frame); else win.addEventListener('resize',resize);
     function show(next, rows) {
-      entries = rows.slice(); mode = next; dirty = true; scale = 1;
+      const previousMode = mode, previousEntries = entries;
+      entries = rows.slice(); mode = next; dirty = true;
+      // A working context can still fail on its first frame. Keep the old 2D
+      // grid (including its zoom) until the 3D replacement has rendered.
+      try { refresh(); }
+      catch (error) {
+        if (previousMode==='2d' && next==='3d') {
+          mode = previousMode; entries = previousEntries; pane.style.display = 'none'; dirty = true;
+        }
+        throw error;
+      }
+      scale = 1; grid.style.transform='';
       pane.style.display = mode==='3d' ? 'block' : 'none';
-      grid.style.display = mode==='2d' ? 'grid' : 'none'; grid.style.transform=''; refresh();
+      grid.style.display = mode==='2d' ? 'grid' : 'none';
     }
     return {
       draw2D(rows, benzeneMode) {
@@ -317,7 +328,7 @@
         try { if (rows.length) ensureViewer(); }
         catch(e) { pane.style.display = mode==='2d'?'none':'block'; throw e; }
         pane.role = 'img'; pane.ariaLabel = rows.map(({record,id}) => record.name || record.formula || String(id)).join(', ');
-        grid.replaceChildren(); show('3d',rows);
+        show('3d',rows); grid.replaceChildren();
       },
       focusAtom(i) {
         if (destroyed || mode!=='3d' || entries.length!==1) return;

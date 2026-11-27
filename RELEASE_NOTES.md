@@ -1,4 +1,12 @@
-# v3.6.0: Trace and compare reaction routes
+# v3.7.0: Workspace cleanup and first-time guide
+
+- Open **Tutorial & wiki** from any workspace. Close the five-step tutorial to try a step, return to continue, or restart it at any time. The English wiki has a walkthrough and version history for each task. Features present before the first tagged release are marked as such.
+- A pasted tab in a model name no longer prevents saving the workspace. Save as allows one pending write, and an older operation no longer replaces newer file feedback. Existing workspace formats stay unchanged.
+- If the first 3D frame fails to render, the existing 2D drawings and zoom are preserved.
+- Removing a plate preserves the other selection; redrawing the rack does not silently enable a same-plate reaction. Selecting the solvent role clears and disables the inapplicable medium field.
+- The local launcher protects setup retries from a partial marker update. Cancelled workers release capacity only after the process exits.
+
+## v3.6.0: Trace and compare reaction routes
 
 - **Compare routes** shows where two collected products diverged from the same recorded plate. Compare each branch’s reagent, medium, catalyst, condition and selected pathway with its own endpoint drawing. Matching names or structures alone never establish a shared route.
 

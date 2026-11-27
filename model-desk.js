@@ -202,7 +202,14 @@
     num.textContent=String(row.id).padStart(2,'0');field.id='desk-input-'+row.id;num.htmlFor=field.id;field.maxLength=files.maxChars;field.autocomplete='off';field.spellcheck=false;field.dir='ltr';field.value=value;
     I.bindAttr(field,'aria-label','models.row',{n:row.id});I.bindAttr(field,'placeholder','models.placeholder');
     const pickLabel=element('label','row-pick');row.pick=element('input');row.pick.type='checkbox';I.bindAttr(row.pick,'aria-label','models.selectRow',{n:row.id});row.pick.addEventListener('change',()=>{listControls();draw();});pickLabel.append(row.pick);
-    head.append(num,field,pickLabel);field.addEventListener('input',()=>edit(row,field.value,true));
+    head.append(num,field,pickLabel);field.addEventListener('input',()=>{
+      // A pasted spreadsheet tab is whitespace to the desk but not valid workspace text.
+      if(field.value.includes('\t')){
+        const {selectionStart,selectionEnd,selectionDirection}=field;
+        field.value=field.value.replace(/\t/g,' ');field.setSelectionRange(selectionStart,selectionEnd,selectionDirection);
+      }
+      edit(row,field.value,true);
+    });
     field.addEventListener('blur',()=>{if(typing===row)typing=null;});
     field.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing)typing=null;});
     const meta=element('div','row-meta');row.status=element('span');row.status.setAttribute('role','status');meta.append(formula,row.status);

@@ -26,7 +26,7 @@ PUBLIC_FILES = {
     "comparison-mirrors.js", "model-comparisons.js", "comparison-locales.js", "comparison.css", "workspace-file.js",
     "reaction-sites.js", "reaction-extension.js", "reaction-guide.js", "reaction-learning-ui.js", "reaction-input.js",
     "plate-chemistry.js", "reaction-plates.js", "plate-viewer.js", "plate-viewer.css", "reaction-plates.css",
-    "plate-history.js", "plate-comparison.js", "plate-comparison.css",
+    "plate-history.js", "plate-comparison.js", "plate-comparison.css", "help-topics.js", "help-guide.js",
     "benzene-view.js", "reaction-rules.js", "reaction-diagram.js", "reaction-addition.js", "reaction-aromatic.js", "reaction-substitution.js", "reaction-oxidation.js", "reaction-motifs.js", "reaction-library.js", "reaction-ui.js",
     "atlas-i18n.js", "atlas-locales.js", "atlas-shell-locales.js", "atlas-preferences.js", "atlas-fonts.css", "viewer-lifecycle.js",
 }

@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parent
@@ -148,7 +149,13 @@ def prepare_environment(root, directory, install=False):
     if status != 0:
         raise LauncherError("Runtime imports failed. A required native library may be unavailable or this platform may not have compatible wheels. See LOCAL_SETUP.md; no system-library or security settings were changed.")
     if state is not None and state["requirements_sha256"] != digest:
-        marker.write_text(json.dumps({"schema": 1, "requirements_sha256": digest}) + "\n", encoding="utf-8")
+        # A short write must not destroy the pending marker needed for a retry.
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=directory,
+                                         delete_on_close=False) as update:
+            json.dump({"schema": 1, "requirements_sha256": digest}, update)
+            update.write("\n")
+            update.close()  # Windows requires a closed file before replacement.
+            os.replace(update.name, marker)
     return python
 
 

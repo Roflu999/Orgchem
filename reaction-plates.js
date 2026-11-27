@@ -76,7 +76,6 @@
     for(const p of plates) rack.set(p.id,p);
     serial=setup.serial;
     $('condition').value=setup.condition; render(setup.left,setup.right);
-    $('left').value=setup.left; $('right').value=setup.right; controls();
     status(plates.length?`Restored ${plates.length} plate${plates.length===1?'':'s'}.`:'The plate rack is empty.');
   }
   function checkpoint() {
@@ -243,17 +242,25 @@
     });
     $('rack').replaceChildren(...cards);
     for(const id of ['left','right']) $(id).replaceChildren(...plates.map(p=>option(p.id,title(p))));
-    $('left').value=rack.has(left)?left:plates[0]?.id || '';
-    $('right').value=rack.has(right)&&right!== $('left').value ? right : plates.find(p=>p.id!==$('left').value)?.id || '';
+    // Replace only a missing selection. Redrawing an unrelated card must not
+    // change the surviving reagent or silently enable a same-plate setup.
+    $('left').value=rack.has(left)?left:(plates.find(p=>p.id!==right) || plates[0])?.id || '';
+    $('right').value=rack.has(right)?right:plates.find(p=>p.id!==$('left').value)?.id || '';
     controls();
   }
   function updateRoles() {
     const item=stocks.get($('stock').value); $('input-wrap').hidden=!!item;
     const roles=item ? ['substrate','reagent','catalyst','solvent'].filter(r=>item.roles.includes(r)) : ['substrate','reagent','catalyst','solvent'];
     $('role').replaceChildren(...roles.map(r=>option(r,r))); if(item?.roles.includes('reagent')) $('role').value='reagent';
-    updateCatalyst();
+    updateRoleFields();
   }
-  function updateCatalyst() { const no=$('role').value!=='reagent'; $('cat-wrap').hidden=no; if(no) $('catalyst').value=''; }
+  function updateRoleFields() {
+    const role=$('role').value;
+    $('cat-wrap').hidden=role!=='reagent';
+    if(role!=='reagent') $('catalyst').value='';
+    $('medium').disabled=role==='solvent';
+    if(role==='solvent') $('medium').value='';
+  }
   $('starter').append(...starters.map(([name],i)=>option(String(i),name)));
   $('condition').append(...conditions.map(c=>option(c.id,c.label)));
   $('stock').append(option('custom','Custom structure'),...stock.map(s=>option(s.id,`${s.label} · ${s.formula}`)));
@@ -266,7 +273,7 @@
       clearOutcome(); render(a.id,b.id); $('condition').value=condition; changed(); status(`Prepared P${a.id} and P${b.id}. Check pathways to compare outcomes.`);
     });
   });
-  $('stock').addEventListener('change',updateRoles); $('role').addEventListener('change',updateCatalyst);
+  $('stock').addEventListener('change',updateRoles); $('role').addEventListener('change',updateRoleFields);
   $('form').addEventListener('input',cancel); $('form').addEventListener('change',cancel); $('starter').addEventListener('change',cancel);
   $('form').addEventListener('submit',e=>{
     e.preventDefault(); if(rack.size>=limit) return;
