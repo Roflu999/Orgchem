@@ -16,7 +16,17 @@
 #plate-outcomes {padding:.8rem;margin-top:.8rem;border-inline-start:3px solid var(--accent);background:var(--accent-soft);overflow-wrap:anywhere}
 #plate-status {padding:.65rem 0;border-block:1px solid var(--line);overflow-wrap:anywhere}
 #plate-rack {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr));padding:0;gap:.65rem;list-style:none}
-#plate-rack li {border:1px solid var(--line);padding:.8rem;border-radius:.45rem;overflow-wrap:anywhere;min-width:0}
+#plate-rack .plate-route {margin-block:.65rem}
+@media(max-width:600px){.plate-forks .plate-comparison-grid {grid-template-columns:minmax(0,1fr)}}
+.plate-forks {margin-block:.65rem}
+.plate-forks summary {cursor:pointer}
+#plate-rack > li:has(.plate-route[open],.plate-forks[open]) {grid-column:1 / -1}
+.plate-route summary {cursor:pointer;color:var(--accent-ink);padding-block:.3rem}
+.plate-route summary:focus-visible {outline:3px solid var(--focus-ring);outline-offset:2px}
+.plate-route-steps {padding-inline-start:1.6rem;margin:.5rem 0}
+.plate-route-steps>li {padding-inline-start:.4rem;border-inline-start:2px solid var(--line)}
+.plate-route-steps>li+li {margin-top:.85rem}
+#plate-rack > li {border:1px solid var(--line);padding:.8rem;border-radius:.45rem;overflow-wrap:anywhere;min-width:0}
 #plate-rack li p {margin:.25rem 0 .55rem;font-size:.875rem} #plate-rack li button+button {margin-inline-start:.5rem}
 #rx-inspect-details {margin-bottom:1rem} #rx-inspect-details summary {cursor:pointer;font-weight:600} #plate-inspector {padding:1rem 0;border-block:1px solid var(--line)}
 @media(max-width:760px){.plate-grid {grid-template-columns:minmax(0,1fr)} #plate-lab>summary span:last-child{display:block;margin-top:.3rem}}

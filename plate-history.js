@@ -58,7 +58,43 @@
       (live.has(bench.right) || plates.length <= 1 && bench.right === ''));
     return {plates,serial:bench.serial,left:bench.left,right:bench.right,condition:bench.condition};
   }
-  const api = {empty,validate,limit,maxSerial};
+  // In the validated rack, parent IDs decrease strictly. Follow the snapshot
+  // for identity and consult the live card only for its own earlier history.
+  function traceRoute(rack, id) {
+    const steps = [];
+    let product = rack.get(id), history = product?.history;
+    while (history && product.role === 'substrate') {
+      const substrate = history.parents.find(p => p.role === 'substrate');
+      const reagent = history.parents.find(p => p.role === 'reagent');
+      const preparation = rack.get(reagent.id)?.history;
+      steps.push({substrate, product, reagent, history, preparation});
+      product = substrate;
+      history = rack.get(substrate.id)?.history;
+    }
+    return {steps:steps.reverse(), missingEarlier:steps.length > 0 && !rack.has(product.id)};
+  }
+  function sameChoice(a, b) {
+    // Use the saved reagent setup, not its rack ID or how it was prepared.
+    return a.reagent.smiles === b.reagent.smiles && a.reagent.medium === b.reagent.medium &&
+      a.reagent.catalyst === b.reagent.catalyst && a.history.condition === b.history.condition &&
+      a.history.pathway === b.history.pathway && a.history.branch.index === b.history.branch.index &&
+      a.history.branch.sites === b.history.branch.sites;
+  }
+  function routeFork(rack, id, otherId) {
+    if (id === otherId) return null;
+    const left = traceRoute(rack,id).steps;
+    const right = new Map(traceRoute(rack,otherId).steps.map(step => [step.substrate.id,step]));
+    for (let i = left.length - 1; i >= 0; i--) {
+      const a = left[i], b = right.get(a.substrate.id);
+      if (!b) continue;
+      // If even the latest shared substrate led to the same step (or a
+      // repeat of it), no earlier shared plate can prove a different choice.
+      if (a.product.id === b.product.id || sameChoice(a,b)) return null;
+      return {shared:a.substrate, left:{fork:a,endpoint:rack.get(id)}, right:{fork:b,endpoint:rack.get(otherId)}};
+    }
+    return null;
+  }
+  const api = {empty,validate,traceRoute,routeFork,limit,maxSerial};
   if (cjs) module.exports = api;
   else root.PlateHistory = api;
 })(typeof window !== 'undefined' ? window : globalThis);

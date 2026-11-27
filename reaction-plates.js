@@ -140,6 +140,35 @@
     if(h.branch.sites) more.append(element('p',h.branch.sites));
     li.append(more);
   }
+  function addRoute(li,p) {
+    const panel=document.createElement('details'), summary=element('summary','Trace route'), body=document.createElement('div');
+    panel.className='plate-route'; summary.setAttribute('aria-label','Trace route for '+title(p));
+    panel.append(summary,body); li.append(panel);
+    panel.addEventListener('toggle',()=>{
+      body.replaceChildren();
+      if(!panel.open || !panel.isConnected) return;
+      const {steps,missingEarlier}=root.PlateHistory.traceRoute(rack,p.id);
+      if(missingEarlier) body.append(element('strong',`${title(steps[0].substrate)} (saved parent)`),
+        element('p','Earlier steps are unavailable for this plate.'));
+      const list=document.createElement('ol'); list.className='plate-route-steps';
+      for(const {substrate,product,reagent,history,preparation} of steps) {
+        const step=document.createElement('li'), detail=document.createElement('details');
+        step.append(element('strong',`${title(substrate)} → ${title(product)}`),
+          element('p',`Reagent: ${title(reagent)} · ${conditionNames.get(history.condition)}`),
+          element('p',`${history.label} · Selected pathway ${history.branch.index+1}: ${history.branch.label}`));
+        detail.append(element('summary','Step details'));
+        for(const plate of [substrate,reagent]) {
+          if(plate.medium) detail.append(element('p',`P${plate.id} medium: ${stocks.get(plate.medium).label}`));
+          if(plate.catalyst) detail.append(element('p',`P${plate.id} catalyst: ${stocks.get(plate.catalyst).label}`));
+        }
+        if(preparation) detail.append(element('p',`Reagent preparation: ${preparation.parents.map(title).join(' + ')} · ${conditionNames.get(preparation.condition)} · ${preparation.branch.label}`));
+        if(history.branch.sites) detail.append(element('p',history.branch.sites));
+        detail.append(element('p',`Starting structure: ${substrate.smiles}`),element('p',`Product structure: ${product.smiles}`));
+        step.append(detail); list.append(step);
+      }
+      body.append(list);
+    });
+  }
   function addComparison(li,p) {
     const before=p.history.parents.find(s=>s.role==='substrate'),host=document.createElement('div');
     host.id='plate-comparison-'+p.id;
@@ -158,8 +187,47 @@
     toggle.setAttribute('aria-label','Compare with starting molecule for '+title(p));toggle.setAttribute('aria-controls',host.id);
     toggle.setAttribute('aria-expanded','false'); li.append(toggle,host);
   }
+  function addRouteComparison(li,p) {
+    const forks=new Map();
+    for(const candidate of rack.values()) {
+      const fork=root.PlateHistory.routeFork(rack,p.id,candidate.id);
+      if(fork) forks.set(candidate.id,fork);
+    }
+    if(!forks.size) return;
+    const panel=document.createElement('details'), summary=element('summary','Compare routes');
+    panel.className='plate-forks'; summary.setAttribute('aria-label','Compare routes for '+title(p));
+    const label=element('label','Compare with '), picker=document.createElement('select');
+    for(const [id,fork] of forks) picker.append(option(id,title(fork.right.endpoint)));
+    label.append(picker);
+    const facts=document.createElement('div'), drawings=document.createElement('div');
+    function showFork() {
+      if(!panel.open || !panel.isConnected) return;
+      const {shared,left,right}=forks.get(picker.value);
+      facts.replaceChildren(element('p','Shared starting plate: '+title(shared)));
+      const captions=[left,right].map(({fork,endpoint},i)=>{
+        const {reagent,substrate,history,product}=fork, side=`Route ${i+1}`;
+        const medium=reagent.medium || substrate.medium;
+        const setup=[title(reagent), medium && stocks.get(medium).label+' medium',
+          reagent.catalyst && stocks.get(reagent.catalyst).label+' catalyst',conditionNames.get(history.condition)].filter(Boolean).join(' · ');
+        facts.append(element('strong',`${side}: ${title(substrate)} → ${title(product)}`),
+          element('p',`${setup} · ${history.label} · Selected pathway ${history.branch.index+1}: ${history.branch.label}`));
+        if(history.branch.sites) facts.append(element('p',history.branch.sites));
+        return {side:side+' endpoint',label:title(endpoint),smiles:endpoint.smiles,setup:'At the fork: '+setup};
+      });
+      const pathways=new Set([left.fork.history.pathway,right.fork.history.pathway]);
+      const worked=(shared.smiles==='CCO' || shared.stockId==='ethanol') && pathways.has('oxidation-aldehyde') && pathways.has('oxidation-acid');
+      root.PlateComparison.show(drawings,...captions,worked?'Distillation removes ethanal as it forms. Under reflux the aldehyde stays with excess oxidant and can oxidise further to ethanoic acid.':null);
+    }
+    panel.append(summary,label,facts,drawings); li.append(panel);
+    picker.addEventListener('change',showFork);
+    panel.addEventListener('toggle',()=>{ if(panel.open) showFork(); else {root.PlateComparison.clear(drawings); facts.replaceChildren();} });
+    drawings.className='plate-fork-drawings';
+  }
+  function clearForkDrawings() {
+    for(const host of $('rack').querySelectorAll('.plate-fork-drawings:not(:empty)')) root.PlateComparison.clear(host);
+  }
   function render(left=$('left').value, right=$('right').value) {
-    closeComparison();
+    closeComparison(); clearForkDrawings();
     const plates=Array.from(rack.values()); $('count').textContent=`${plates.length} / ${limit}`;
     const cards=plates.map(p=>{
       const li=document.createElement('li'); li.dataset.plate=p.id;
@@ -170,7 +238,7 @@
       }
       const view=button('Inspect',()=>inspect(p)),remove=button('Remove',()=>{cancel(); clearOutcome(); if(inspecting===p) resetInspection(); rack.delete(p.id); render(); changed(); status(`Removed P${p.id}. Other plates are unchanged.`); $('stock').focus();});
       view.setAttribute('aria-label','Inspect '+title(p));remove.setAttribute('aria-label','Remove '+title(p));li.append(view,remove);
-      if(p.history && p.history.pathway!=='reagent-preparation') addComparison(li,p);
+      if(p.history && p.role==='substrate') { addRoute(li,p); addComparison(li,p); addRouteComparison(li,p); }
       return li;
     });
     $('rack').replaceChildren(...cards);
@@ -266,7 +334,11 @@
     });
   });
   $('component').addEventListener('change',inspectComponent); $('close-view').addEventListener('click',()=>{const id=inspecting?.id;resetInspection(); $('rack').querySelector(`[data-plate="${id}"] button`)?.focus();});
-  function suspend() { cancel(); resetInspection(); closeComparison(); }
+  function suspend() {
+    cancel(); resetInspection(); closeComparison();
+    clearForkDrawings();
+    for(const panel of $('rack').querySelectorAll('.plate-route[open],.plate-forks[open]')) panel.open=false;
+  }
   $('lab').addEventListener('toggle',()=>{if(!$('lab').open) suspend();});
   root.ReactionPlates={capture,prepare,checkpoint,setActive(on) { active=on; if(!on) suspend(); }};
 })(window);

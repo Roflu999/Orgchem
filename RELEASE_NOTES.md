@@ -1,4 +1,11 @@
-# v3.5.0: Follow a reaction
+# v3.6.0: Trace and compare reaction routes
+
+- **Compare routes** shows where two collected products diverged from the same recorded plate. Compare each branch’s reagent, medium, catalyst, condition and selected pathway with its own endpoint drawing. Matching names or structures alone never establish a shared route.
+
+- Open **Trace route** on a collected product to follow its recorded reactions in order. Each step identifies both organic plates, the reagent, condition and selected pathway. Reagent preparation stays in the step details, not in the organic sequence.
+- Removing an intermediate leaves its snapshot on its child. The trace stops at that plate rather than guessing earlier steps from a matching molecule. Save before removal to keep the complete route; reopening the file and undoing the open restore the corresponding traces. No workspace format change is needed.
+
+## v3.5.0: Follow a reaction
 
 - Compare a product plate with its starting molecule in 2D without changing the model workspace. Open **What changed?** for a supported transformation.
 - Each collected plate records its immediate parents, conditions, and selected pathway. Removing a parent does not erase the child's record.

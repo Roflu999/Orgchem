@@ -72,8 +72,17 @@ async function runChecks(){
       await delay(50);
     }
   };
+  // jsdom has no download manager. Exercise the real serializer and capture its Blob.
+  function downloadWorkspace(){
+    let saved;
+    w.URL.createObjectURL=blob=>{saved=blob;return 'blob:'+origin+'/workspace';};w.URL.revokeObjectURL=()=>{};
+    const prevent=e=>{if(e.target.closest('a[download]'))e.preventDefault();};
+    doc.addEventListener('click',prevent);
+    try {el('desk-file-download').click();} finally {doc.removeEventListener('click',prevent);}
+    assert(saved?.size>0,'Workspace download must provide a nonempty file');return saved;
+  }
   if(process.argv[3]==='--plate-files'){
-    el('show-reagents').click();await checkPlates({w,el,select,until},true);assert.deepEqual(errors,[]);return;
+    el('show-reagents').click();await checkPlates({w,el,select,until,downloadWorkspace},true);assert.deepEqual(errors,[]);return;
   }
   assert.equal(el('show-models').getAttribute('aria-pressed'),'true');
   const rows=()=>[...doc.querySelectorAll('#desk-rows > li')];
@@ -232,12 +241,7 @@ async function runChecks(){
     pick.click();assert.equal(grid.querySelectorAll('figcaption').length,2);
     select('language-select','en');assert.equal(comparisonStatus.textContent,w.AtlasI18n.t('compare.legend2d'));
   } finally {w.ModelInput.resolve=originalResolve;}
-  let saved;
-  w.URL.createObjectURL=blob=>{saved=blob;return 'blob:'+origin+'/workspace';};w.URL.revokeObjectURL=()=>{};
-  // jsdom has no download manager. Capture only the download click, not normal events.
-  const preventDownload=e=>{if(e.target.closest('a[download]'))e.preventDefault();};
-  doc.addEventListener('click',preventDownload);el('desk-file-download').click();doc.removeEventListener('click',preventDownload);
-  assert(saved?.size>0);el('desk-starter-oxygen').click();
+  const saved=downloadWorkspace();el('desk-starter-oxygen').click();
   Object.defineProperty(el('desk-file-input'),'files',{configurable:true,value:[new w.File([saved],'workspace.orgchem.json',{type:'application/json'})]});
   el('desk-file-input').dispatchEvent(new w.Event('change'));
   await until(()=>rows().every(r=>r.querySelector('.row-head > input').value.includes('@')),'restore the saved mirror pair');

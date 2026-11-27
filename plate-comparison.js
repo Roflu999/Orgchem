@@ -12,7 +12,7 @@
     view.panel.remove();
   }
 
-  async function show(container, before, after, explanation, setup) {
+  async function show(container, left, right, explanation, setup) {
     clear(container);
     const doc = container.ownerDocument;
     function el(tag, cls, text) {
@@ -22,7 +22,8 @@
       return node;
     }
     const panel = el('section', 'plate-comparison');
-    panel.setAttribute('aria-label', 'Before and after structures');
+    const customCaptions = [left, right].some(input => input?.side || input?.setup);
+    panel.setAttribute('aria-label', customCaptions ? 'Structure comparison' : 'Before and after structures');
     const grid = el('div', 'plate-comparison-grid');
     if (setup) panel.append(el('p', 'plate-comparison-setup', 'Reaction conditions: ' + setup));
     panel.append(grid);
@@ -36,12 +37,14 @@
     views.set(container, {panel, controller, stages});
     const current = () => !controller.signal.aborted && panel.parentNode === container;
 
-    async function draw(side, input) {
+    async function draw(defaultSide, input) {
+      const side = input?.side || defaultSide;
       const smiles = typeof input?.smiles === 'string' ? input.smiles.trim() : '';
       const figure = el('figure'), caption = el('figcaption');
       const name = el('strong', '', input?.label || 'Structure');
       name.dir = 'auto';
       caption.append(el('span', 'plate-comparison-side', side), name);
+      if (input?.setup) caption.append(el('span', 'plate-comparison-setup', input.setup));
       const host = el('div', 'plate-comparison-drawing');
       host.hidden = true;
       const notice = el('p', 'plate-comparison-note', 'Loading structure...');
@@ -53,7 +56,8 @@
         if (!smiles) throw Error('No SMILES supplied.');
         const record = await root.ReactionInput.parse('smiles:' + smiles, {signal:controller.signal});
         if (!current()) return;
-        if (record.knownName && record.name) name.textContent = record.name;
+        // Route captions identify a particular plate, not just the parsed molecule.
+        if ((!customCaptions || !input.label) && record.knownName && record.name) name.textContent = record.name;
         if (record.formula) {
           const formula = el('bdi', 'plate-comparison-formula', root.MoleculeRecords.prettyFormula(record.formula));
           formula.dir = 'ltr'; caption.append(formula);
@@ -77,7 +81,7 @@
         }
       }
     }
-    await Promise.all([draw('Starting molecule', before), draw('Selected organic product', after)]);
+    await Promise.all([draw('Starting molecule', left), draw('Selected organic product', right)]);
   }
 
   root.PlateComparison = {show, clear};

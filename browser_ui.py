@@ -153,9 +153,33 @@ def student_walkthrough(page, captures=None):
 
 
 def plate_workspace(page):
-    """Follow two products from one pair; save, reload and reopen using local files."""
+    """Trace two oxidations using the keyboard, including a broken and restored route."""
     def key(selector):
         page.locator(selector).press('Enter')
+
+    route = page.locator('#plate-rack > [data-plate="5"] details.plate-route')
+    summary = route.locator(':scope > summary')
+    steps = route.locator('ol.plate-route-steps > li')
+    missing = 'Earlier steps are unavailable for this plate.'
+
+    def inspect_trace(partial=False):
+        expect(summary).to_have_text('Trace route')
+        expect(route).not_to_have_attribute('open', '')
+        summary.press('Enter')
+        expect(summary).to_be_focused()
+        expect(steps).to_have_count(1 if partial else 2)
+        if not partial:
+            expect(steps.first).to_contain_text(re.compile(r'P1\b.*ethanol.*P3\b.*ethanal', re.I | re.S))
+        expect(steps.last).to_contain_text(re.compile(r'P3\b.*ethanal.*P5\b.*ethanoic acid', re.I | re.S))
+        if partial:
+            expect(route.get_by_text(missing, exact=True)).to_be_visible()
+        else:
+            expect(route.get_by_text(missing, exact=True)).to_have_count(0)
+        assert steps.evaluate_all('(nodes) => nodes.every(n => n.scrollWidth <= n.clientWidth + 1)'), 'Route step text overflows'
+        assert not semantics(page)['overflow']
+        summary.press('Space')
+        expect(steps.last).to_be_hidden()
+        expect(summary).to_be_focused()
 
     key('#show-reagents')
     key('#plate-lab > summary')
@@ -174,17 +198,28 @@ def plate_workspace(page):
         card.locator('.plate-comparison summary').press('Enter')
         expect(card.locator('.plate-comparison details p')).to_be_visible()
         assert not semantics(page)['overflow']
+    page.locator('#plate-left').select_option('3')
+    key('#plate-preview')
+    key('#plate-collect')
+    expect(cards).to_have_count(5)
+    inspect_trace()
+    summary.press('Enter')
+    expect(steps.last).to_be_visible()
+    key('#plate-lab > summary')
+    expect(route).not_to_have_attribute('open', '')
+    key('#plate-lab > summary')
     key('#plate-files')
     expect(page.locator('#desk-files > summary')).to_be_focused()
     with page.expect_download() as event:
         key('#desk-file-download')
     download = event.value
     data = download.path().read_bytes()
-    assert [p['history']['condition'] for p in json.loads(data)['bench']['plates'][2:]] == ['distil', 'reflux']
+    assert [p['history']['condition'] for p in json.loads(data)['bench']['plates'][2:]] == ['distil', 'reflux', 'reflux']
+    file = {'name': download.suggested_filename, 'mimeType': 'application/json', 'buffer': data}
     page.reload(wait_until='domcontentloaded')
     expect(cards).to_have_count(0)
-    page.locator('#desk-file-input').set_input_files({'name':download.suggested_filename,'mimeType':'application/json','buffer':data})
-    expect(cards).to_have_count(4)
+    page.locator('#desk-file-input').set_input_files(file)
+    expect(cards).to_have_count(5)
     key('#show-reagents')
     key('#plate-lab > summary')
     for j in (2, 3):
@@ -192,8 +227,22 @@ def plate_workspace(page):
         expect(card).to_contain_text('P1 + P2')
         card.get_by_role('button', name=re.compile('Compare with starting molecule')).press('Enter')
         expect(card.locator('.plate-comparison img')).to_have_count(2)
-    assert not semantics(page)['overflow']
-    print(f'PASS keyboard plate comparison and local file reload at {page.viewport_size["width"]}px', flush=True)
+    inspect_trace()
+    cards.nth(2).get_by_role('button', name=re.compile('^Remove P3')).press('Enter')
+    expect(cards).to_have_count(4)
+    inspect_trace(partial=True)
+    key('#plate-files')
+    page.locator('#desk-file-input').set_input_files(file)
+    expect(cards).to_have_count(5)
+    key('#show-reagents')
+    inspect_trace()
+    for control, partial in [('undo', True), ('redo', False)]:
+        key('#plate-files')
+        key('#desk-' + control)
+        expect(cards).to_have_count(4 if partial else 5)
+        key('#show-reagents')
+        inspect_trace(partial)
+    print(f'PASS keyboard plate comparisons, oxidation trace, file reload, removal and undo/redo at {page.viewport_size["width"]}px', flush=True)
 
 
 def reaction_phone(page, captures=None):

@@ -29,7 +29,9 @@ global.ModelStage = {create(host) {
   const after = Object.freeze({label:'Ethanol', smiles:'CCO'});
   const stereo = {label:'Specified stereo', smiles:'F/C=C/F'};
   const {show, clear} = PlateComparison;
-  await show(host, before, after, '<b>A new bond</b>');
+  await show(host, before, after, '<b>A new bond</b>', 'Recorded setup');
+  assert.equal(host.all('section')[0]['aria-label'], 'Before and after structures');
+  assert.equal(host.all('p')[0].textContent, 'Reaction conditions: Recorded setup');
   assert.equal(stages.length, 2);
   assert.deepEqual(stages.map(s => s.rows[0].record.formula), ['C2H4O', 'C2H6O']);
   assert.deepEqual(stages.map(s => Object.keys(s.rows[0]).sort()), [['id','record'],['id','record']]);
@@ -46,22 +48,39 @@ global.ModelStage = {create(host) {
   assert.match(host.all('p')[0].textContent, /local RDKit/);
   assert.equal(host.all('code')[0].textContent, stereo.smiles);
   const unaffected = stages.at(-1);
+  const distill = Object.freeze({label:'P3 Ethanal', smiles:'CC=O', side:'Route A', setup:'Distillation'});
+  const reflux = Object.freeze({label:'P4 Ethanoic acid', smiles:'CC(=O)O', side:'Route B', setup:'Reflux'});
+  function captions() {
+    return other.all('figcaption').map(c => [c.all('strong')[0].textContent, ...c.all('span').map(n => n.textContent)]);
+  }
+  await show(other, distill, reflux);
+  assert.deepEqual(captions(), [[distill.label,distill.side,distill.setup], [reflux.label,reflux.side,reflux.setup]]);
+  assert.deepEqual(other.all('figure').map(f => f.all('div')[0]['aria-label']), [distill,reflux].map(
+    i => `${i.side}: ${i.label}. SMILES: ${i.smiles}`));
+  assert.equal(other.all('section')[0]['aria-label'], 'Structure comparison');
+  await show(other, {...distill, side:undefined}, {...reflux, setup:undefined});
+  assert.deepEqual(captions(), [[distill.label,'Starting molecule',distill.setup], [reflux.label,reflux.side]]);
+
   const pending = [];
   const parse = ReactionInput.parse;
   ReactionInput.parse = (value, {signal}) => new Promise((resolve, reject) => pending.push({value, signal, resolve, reject}));
-  const stale = show(other, before, stereo);
-  const latest = show(other, after, before);
-  assert.deepEqual(pending.map(c => c.value), [before,stereo,after,before].map(i => 'smiles:' + i.smiles));
+  const stale = show(other, distill, reflux);
+  const latest = show(other, reflux, distill);
+  assert.deepEqual(pending.map(c => c.value), [distill,reflux,reflux,distill].map(i => 'smiles:' + i.smiles));
   assert(pending.slice(0,2).every(c => c.signal.aborted));
   assert(!pending[2].signal.aborted && !unaffected.destroyed);
-  const record = await parse('smiles:CCO');
+  const record = await parse('smiles:' + reflux.smiles);
   pending[2].resolve(record); pending[3].reject(Error('Service disconnected.'));
   await latest;
   const count = stages.length, panel = other.children[0];
   pending[0].resolve(record); pending[1].reject(Error('Late failure.'));
   await stale;
   assert.equal(stages.length, count); assert.deepEqual(other.children, [panel]);
-  assert.match(other.all('p')[0].textContent, /Service disconnected/);
+  assert.deepEqual(captions(), [[reflux.label,reflux.side,reflux.setup], [distill.label,distill.side,distill.setup]]);
+  const [drawn, failed] = other.all('figure');
+  assert.equal(drawn.all('div')[0].hidden, false); assert.equal(drawn.all('code').length, 0);
+  assert.equal(failed.all('code')[0].textContent, distill.smiles);
+  assert.match(failed.all('p')[0].textContent, /Service disconnected/);
   const closing = show(other, before, after);
   clear(other); pending[4].resolve(record); pending[5].resolve(record); await closing;
   assert(pending[4].signal.aborted); assert.equal(other.children.length, 0);
